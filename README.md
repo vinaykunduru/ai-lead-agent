@@ -17,12 +17,18 @@ React Hook Form · Sentry · pnpm.
 2. Copy `.env.example` to `.env.local` and fill in:
    - `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
      `SUPABASE_SERVICE_ROLE_KEY` — Project Settings → API
-   - `DATABASE_URL` — Project Settings → Database → Connection string (the
-     "Session pooler" URI works well for this app). The role in this
-     connection string must be able to `SET ROLE authenticated` — Supabase's
-     default `postgres` connection role can; if you've created a custom
-     restricted role for this, it needs that grant too (see
-     `src/db/client.ts`'s `withRlsContext`).
+   - `DATABASE_URL` — Project Settings → Database → Connection string. **Use
+     the "Session pooler" URI, not "Direct connection".** The direct
+     connection hostname (`db.<ref>.supabase.co`) only has an IPv6 (AAAA)
+     DNS record — no IPv4 record exists for it at all — so it fails to
+     resolve on any IPv4-only network (many sandboxes, containers, and
+     corporate networks included) with a plain DNS `ENOTFOUND`/connection
+     error that has nothing to do with the credentials being wrong. The
+     pooler hostname (`aws-0-<region>.pooler.supabase.com`) is IPv4-reachable.
+     Separately: the role in this connection string must be able to
+     `SET ROLE authenticated` — Supabase's default `postgres` connection role
+     can; if you've created a custom restricted role for this, it needs that
+     grant too (see `src/db/client.ts`'s `withRlsContext`).
    - `NEXT_PUBLIC_APP_URL` — `http://localhost:3000` for local dev
    - AI/embeddings/job provider keys are optional until the Knowledge Base
      and AI Behaviour modules are built (later phase) — leave them blank for
