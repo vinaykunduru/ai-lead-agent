@@ -102,6 +102,12 @@ CLAUDE.md §7's mandatory cases:
    `skipped`, not `passed`) rather than failing — a skip is a signal isolation
    hasn't been verified in that environment, not proof it works.
 
+On **Node.js 20**, also set `NODE_OPTIONS=--experimental-websocket` when
+running `pnpm test` locally — `@supabase/supabase-js`'s realtime client
+requires a global `WebSocket`, which Node 20 doesn't provide without that
+flag (Node 22+ doesn't need it; the CI workflow uses Node 22 for this
+reason). This has nothing to do with RLS itself.
+
 In CI (`.github/workflows/ci.yml`), this suite only runs for real if you add
 `TEST_DATABASE_URL`, `TEST_SUPABASE_SERVICE_ROLE_KEY`, `TEST_SUPABASE_URL`,
 `TEST_SUPABASE_ANON_KEY` as repository secrets pointing at a disposable
@@ -109,13 +115,24 @@ project; otherwise it skips there too.
 
 ## Manually verifying the first-owner invitation flow
 
+Verified end-to-end against a real Supabase project (2026-07-11): admin
+creates company → invites owner → owner's `/auth/confirm` establishes a
+session → `/auth/set-password` → lands in `/app` seeing only that company.
+`src/app/auth/confirm` is a client-rendered page for a reason found during
+that verification: Supabase's invite links for this project deliver the
+session as an implicit-flow `#access_token=...` hash fragment, which a
+server-only Route Handler can never see (hash fragments never reach the
+server) — see CLAUDE.md §3.11.
+
 1. As your platform admin, go to `/admin/companies`, create a company, open
    it, and use "Create the first owner" on the Users tab.
 2. Check the invited email's inbox (Supabase's built-in email sending works
-   out of the box on free-tier projects for a limited volume; configure
-   custom SMTP in Supabase for anything beyond testing).
-3. Click the invite link. It should land you on `/auth/confirm`, which
-   exchanges the token and redirects to `/auth/set-password`.
+   out of the box on free-tier projects, but at a **very low rate limit** —
+   a handful of sends per hour before you get "email rate limit exceeded";
+   configure custom SMTP in Supabase for anything beyond light testing).
+3. Click the invite link. It should land you on `/auth/confirm` (briefly
+   showing "Confirming your invite..."), then redirect to
+   `/auth/set-password`.
 4. Set a password. You should land on `/app` and see only that company's
    dashboard.
 5. Confirm in `/admin/companies/<id>/users` that the membership shows

@@ -110,13 +110,21 @@ alone is sufficient.**
     `modules/organizations/service.ts`'s `createFirstOwner`). We never
     generate, store, or validate the invite token ourselves — expiry,
     single-use consumption, and email/identity binding are entirely
-    Supabase's responsibility. `src/app/auth/confirm/route.ts` only asks
-    Supabase "is this token valid" via `verifyOtp` and redirects; it holds no
+    Supabase's responsibility. `src/app/auth/confirm` only asks Supabase "is
+    this token valid" via `setSession`/`verifyOtp` and redirects; it holds no
     token state. The membership row is created at invite time (by the admin
     action), not at acceptance time (by the user) — acceptance
     (`src/app/auth/set-password`) only establishes a session and sets a
     password, so re-visiting or retrying that step can't create a duplicate
     membership.
+    - **`/auth/confirm` must be a client-rendered page, not a Route
+      Handler.** Confirmed by testing against a real Supabase project: which
+      of two link formats Supabase actually sends — `?token_hash=...&type=...`
+      (server-visible) or `#access_token=...&refresh_token=...` (an implicit-flow
+      hash fragment, which by HTTP/URL spec a server never receives at all) —
+      depends on project configuration, not on our code. A server-only Route
+      Handler can only ever see the first form and silently fails on the
+      second. The client component handles both.
 
 ## 4. Public widget rules
 
