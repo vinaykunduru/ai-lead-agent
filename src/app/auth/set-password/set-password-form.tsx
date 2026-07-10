@@ -8,70 +8,65 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
-import { loginSchema, type LoginInput } from "@/shared/validation/auth";
+import { setPasswordSchema, type SetPasswordInput } from "@/shared/validation/auth";
+import { setPasswordAction } from "./actions";
 
-export function LoginForm({ nextPath, notice }: { nextPath: string; notice?: string }) {
+export function SetPasswordForm() {
   const router = useRouter();
   const [formError, setFormError] = useState<string | null>(null);
   const {
     register,
     handleSubmit,
     formState: { errors, isSubmitting },
-  } = useForm<LoginInput>({ resolver: zodResolver(loginSchema) });
+  } = useForm<SetPasswordInput>({ resolver: zodResolver(setPasswordSchema) });
 
-  async function onSubmit(values: LoginInput) {
+  async function onSubmit(values: SetPasswordInput) {
     setFormError(null);
-    const supabase = createSupabaseBrowserClient();
-    const { error } = await supabase.auth.signInWithPassword(values);
-
-    if (error) {
-      setFormError("Invalid email or password.");
+    const result = await setPasswordAction(values);
+    if (!result.ok) {
+      setFormError(result.error);
       return;
     }
-
-    router.push(nextPath);
+    // Root resolver sends the now-authenticated user to /admin or /app.
+    router.push("/");
     router.refresh();
   }
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Sign in</CardTitle>
-        <CardDescription>Enter your email and password to continue.</CardDescription>
+        <CardTitle>Set your password</CardTitle>
+        <CardDescription>Choose a password to finish setting up your account.</CardDescription>
       </CardHeader>
       <CardContent>
-        {notice ? (
-          <div
-            role="alert"
-            className="mb-4 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
-          >
-            {notice}
-          </div>
-        ) : null}
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
-          <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
-            <Input id="email" type="email" autoComplete="email" {...register("email")} />
-            {errors.email ? (
-              <p className="text-sm text-destructive">{errors.email.message}</p>
-            ) : null}
-          </div>
           <div className="space-y-2">
             <Label htmlFor="password">Password</Label>
             <Input
               id="password"
               type="password"
-              autoComplete="current-password"
+              autoComplete="new-password"
               {...register("password")}
             />
             {errors.password ? (
               <p className="text-sm text-destructive">{errors.password.message}</p>
             ) : null}
           </div>
+          <div className="space-y-2">
+            <Label htmlFor="confirmPassword">Confirm password</Label>
+            <Input
+              id="confirmPassword"
+              type="password"
+              autoComplete="new-password"
+              {...register("confirmPassword")}
+            />
+            {errors.confirmPassword ? (
+              <p className="text-sm text-destructive">{errors.confirmPassword.message}</p>
+            ) : null}
+          </div>
           {formError ? <p className="text-sm text-destructive">{formError}</p> : null}
           <Button type="submit" className="w-full" disabled={isSubmitting}>
-            {isSubmitting ? "Signing in..." : "Sign in"}
+            {isSubmitting ? "Saving..." : "Set password & continue"}
           </Button>
         </form>
       </CardContent>

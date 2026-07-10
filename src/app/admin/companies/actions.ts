@@ -70,6 +70,7 @@ export async function createFirstOwnerAction(input: unknown): Promise<ActionResu
   if (!result.ok) {
     const messages: Record<string, string> = {
       already_has_owner: "This company already has a user.",
+      company_suspended: "Reactivate this company before inviting a user.",
       invite_failed: result.message ?? "Could not send the invite email.",
     };
     return { ok: false, error: messages[result.error] };

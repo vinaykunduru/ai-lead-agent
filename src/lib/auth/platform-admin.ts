@@ -9,7 +9,7 @@ import { getAuthenticatedUser } from "./session";
  * Platform admin status is deliberately checked via the service-role client,
  * not withRlsContext — the `platform_admins` table has no RLS policy for the
  * "authenticated" role at all (see db/migrations/0001), so an RLS-scoped
- * query would always return zero rows. This is one of the three explicit,
+ * query would always return zero rows. This is one of the four explicit,
  * documented service-role call sites in CLAUDE.md §3.6.
  *
  * Being a platform admin is structurally separate from being a member of any

@@ -11,9 +11,10 @@ const queryClient = postgres(serverEnv.DATABASE_URL, { prepare: false });
  * Service-role Drizzle instance. The underlying Postgres role bypasses RLS
  * entirely (Supabase's connection role has BYPASSRLS). Only import this from
  * code explicitly allowed to bypass RLS per CLAUDE.md §3.6: the platform-admin
- * module, job workers, and public widget endpoints — and every one of those
- * call sites must manually scope every query itself, since the database will
- * not do it for them.
+ * module, job workers, public widget endpoints, and the suspended-org notice
+ * check (`lib/auth/suspended.ts`) — and every one of those call sites must
+ * manually scope every query itself, since the database will not do it for
+ * them.
  *
  * Do not use this for ordinary company/admin-dashboard reads or writes.
  * Use `withRlsContext` instead so Postgres RLS is actually enforced.

@@ -55,6 +55,8 @@ describe.skipIf(!hasLiveDatabase)("cross-tenant isolation (live Supabase project
       schema,
       admin: supabaseAdmin.createSupabaseAdminClient(),
       eq: drizzleOrm.eq,
+      inArray: drizzleOrm.inArray,
+      sql: drizzleOrm.sql,
     };
 
     const stamp = Date.now();
@@ -144,5 +146,154 @@ describe.skipIf(!hasLiveDatabase)("cross-tenant isolation (live Supabase project
       tx.select().from(mod.schema.platformAdmins),
     );
     expect(rows).toEqual([]);
+  });
+
+  it("(C) a user cannot update another organization's row via RLS", async () => {
+    const rows = await mod.withRlsContext(userA.id, (tx: typeof mod.db) =>
+      tx
+        .update(mod.schema.organizations)
+        .set({ name: "Hijacked" })
+        .where(mod.eq(mod.schema.organizations.id, orgB.id))
+        .returning(),
+    );
+    expect(rows).toEqual([]);
+
+    // Confirm via the service-role path that orgB was genuinely untouched —
+    // an empty `rows` result alone wouldn't distinguish "blocked" from
+    // "silently no-opped".
+    const [stillB] = await mod.db
+      .select()
+      .from(mod.schema.organizations)
+      .where(mod.eq(mod.schema.organizations.id, orgB.id));
+    expect(stillB.name).toBe("Tenant Test B");
+  });
+
+  it("(D) a user cannot delete another organization's row via RLS", async () => {
+    const rows = await mod.withRlsContext(userA.id, (tx: typeof mod.db) =>
+      tx
+        .delete(mod.schema.organizations)
+        .where(mod.eq(mod.schema.organizations.id, orgB.id))
+        .returning(),
+    );
+    expect(rows).toEqual([]);
+
+    const [stillB] = await mod.db
+      .select()
+      .from(mod.schema.organizations)
+      .where(mod.eq(mod.schema.organizations.id, orgB.id));
+    expect(stillB).toBeDefined();
+  });
+
+  it("(E) a user cannot insert a tenant-owned row while in another org's RLS context", async () => {
+    // No INSERT policy exists yet for "authenticated" on memberships at all
+    // (team invites are a later phase — see db/migrations/0001), so this is
+    // currently blocked even more broadly than E asks: no company user can
+    // insert a membership row for *any* org, which trivially covers "using
+    // Company B's organization_id" too. Using userB (a real user, so the FK
+    // to auth.users is satisfied) isolates the failure to RLS specifically,
+    // not a foreign-key error.
+    await expect(
+      mod.withRlsContext(userA.id, (tx: typeof mod.db) =>
+        tx.insert(mod.schema.memberships).values({
+          organizationId: orgB.id,
+          userId: userB.id,
+          role: "viewer",
+          status: "active",
+        }),
+      ),
+    ).rejects.toThrow();
+  });
+
+  it("(G/I) an RLS context bound to an unrecognized user id sees nothing, not an error", async () => {
+    // A syntactically valid UUID that matches no real user/membership —
+    // simulates "authenticated role, but no recognizable identity/context".
+    const unrecognizedUserId = "00000000-0000-0000-0000-000000000000";
+
+    const orgRows = await mod.withRlsContext(unrecognizedUserId, (tx: typeof mod.db) =>
+      tx.select().from(mod.schema.organizations),
+    );
+    const membershipRows = await mod.withRlsContext(unrecognizedUserId, (tx: typeof mod.db) =>
+      tx.select().from(mod.schema.memberships),
+    );
+
+    expect(orgRows).toEqual([]);
+    expect(membershipRows).toEqual([]);
+  });
+
+  it("(H) platform-admin (service-role) access is an explicit, separate path from RLS — not a byproduct of it", async () => {
+    // The service-role `db` client intentionally bypasses RLS — every
+    // platform-admin service function in modules/organizations/service.ts
+    // uses it, restricted to that module by code convention (CLAUDE.md
+    // §3.6), not by the database. Demonstrate the boundary explicitly: it
+    // sees both orgs...
+    const bothOrgs = await mod.db
+      .select({ id: mod.schema.organizations.id })
+      .from(mod.schema.organizations)
+      .where(mod.inArray(mod.schema.organizations.id, [orgA.id, orgB.id]));
+    expect(bothOrgs.map((r: { id: string }) => r.id).sort()).toEqual([orgA.id, orgB.id].sort());
+
+    // ...while the RLS-scoped path for the exact same query still only ever
+    // returns the caller's own organization.
+    const rlsScoped = await mod.withRlsContext(userA.id, (tx: typeof mod.db) =>
+      tx
+        .select({ id: mod.schema.organizations.id })
+        .from(mod.schema.organizations)
+        .where(mod.inArray(mod.schema.organizations.id, [orgA.id, orgB.id])),
+    );
+    expect(rlsScoped.map((r: { id: string }) => r.id)).toEqual([orgA.id]);
+  });
+
+  it("(J) withRlsContext does not leak claims between concurrent transactions", async () => {
+    const readClaimSub = (tx: typeof mod.db) =>
+      tx.execute(mod.sql`select current_setting('request.jwt.claims', true)::json->>'sub' as sub`);
+
+    const [resultA, resultB] = await Promise.all([
+      mod.withRlsContext(userA.id, readClaimSub),
+      mod.withRlsContext(userB.id, readClaimSub),
+    ]);
+
+    expect(resultA[0].sub).toBe(userA.id);
+    expect(resultB[0].sub).toBe(userB.id);
+  });
+
+  it("a user cannot hold a second active membership in a different organization", async () => {
+    // Phase 1 rule (CLAUDE.md §3): one active org per user, enforced by the
+    // partial unique index in db/migrations/0002 — not just app-layer.
+    // userA already has an active membership in orgA from beforeAll.
+    await expect(
+      mod.db.insert(mod.schema.memberships).values({
+        organizationId: orgB.id,
+        userId: userA.id,
+        role: "viewer",
+        status: "active",
+      }),
+    ).rejects.toThrow();
+  });
+
+  it("(§4) platform_admins access is granted and revoked immediately, independent of org membership", async () => {
+    // userA is a real user with an active company membership but no
+    // platform_admins row — this is the same query shape isPlatformAdmin()
+    // (lib/auth/platform-admin.ts) performs.
+    const before = await mod.db
+      .select({ id: mod.schema.platformAdmins.id })
+      .from(mod.schema.platformAdmins)
+      .where(mod.eq(mod.schema.platformAdmins.userId, userA.id));
+    expect(before).toEqual([]);
+
+    await mod.db.insert(mod.schema.platformAdmins).values({ userId: userA.id });
+    const granted = await mod.db
+      .select({ id: mod.schema.platformAdmins.id })
+      .from(mod.schema.platformAdmins)
+      .where(mod.eq(mod.schema.platformAdmins.userId, userA.id));
+    expect(granted).toHaveLength(1);
+
+    await mod.db
+      .delete(mod.schema.platformAdmins)
+      .where(mod.eq(mod.schema.platformAdmins.userId, userA.id));
+    const revoked = await mod.db
+      .select({ id: mod.schema.platformAdmins.id })
+      .from(mod.schema.platformAdmins)
+      .where(mod.eq(mod.schema.platformAdmins.userId, userA.id));
+    expect(revoked).toEqual([]);
   });
 });

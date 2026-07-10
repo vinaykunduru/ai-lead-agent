@@ -4,6 +4,7 @@ import { db, withRlsContext } from "@/db/client";
 import { memberships, organizations, type Organization } from "@/db/schema";
 import { requirePlatformAdmin } from "@/lib/auth/platform-admin";
 import { requireCompanySession } from "@/lib/auth/session";
+import { publicEnv } from "@/lib/env.public";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { recordAuditLog } from "@/modules/audit/service";
 import type {
@@ -111,10 +112,16 @@ export async function updateCompanyStatus(
     throw new Error("Company not found");
   }
 
+  const actionByStatus: Record<Organization["status"], string> = {
+    active: "company.activated",
+    suspended: "company.suspended",
+    trial: "company.status_changed",
+  };
+
   await recordAuditLog({
     actorUserId: admin.userId,
     actorType: "platform_admin",
-    action: input.status === "suspended" ? "company.suspended" : `company.status_changed`,
+    action: actionByStatus[org.status],
     resourceType: "organization",
     resourceId: org.id,
     metadata: { status: org.status },
@@ -180,7 +187,11 @@ export async function listCompanyUsers(organizationId: string): Promise<CompanyU
 
 export type CreateFirstOwnerResult =
   | { ok: true }
-  | { ok: false; error: "already_has_owner" | "invite_failed"; message?: string };
+  | {
+      ok: false;
+      error: "already_has_owner" | "company_suspended" | "invite_failed";
+      message?: string;
+    };
 
 /**
  * Platform admin creates the first company owner. No public self-signup
@@ -191,6 +202,18 @@ export async function createFirstOwner(
   input: CreateFirstOwnerInput,
 ): Promise<CreateFirstOwnerResult> {
   const admin = await requirePlatformAdmin();
+
+  const [org] = await db
+    .select({ status: organizations.status })
+    .from(organizations)
+    .where(eq(organizations.id, input.organizationId))
+    .limit(1);
+  if (!org) {
+    return { ok: false, error: "invite_failed", message: "Company not found" };
+  }
+  if (org.status === "suspended") {
+    return { ok: false, error: "company_suspended" };
+  }
 
   const existingOwner = await db
     .select({ id: memberships.id })
@@ -204,6 +227,7 @@ export async function createFirstOwner(
   const supabaseAdmin = createSupabaseAdminClient();
   const { data, error } = await supabaseAdmin.auth.admin.inviteUserByEmail(input.email, {
     data: { full_name: input.fullName },
+    redirectTo: `${publicEnv.NEXT_PUBLIC_APP_URL}/auth/confirm?next=/auth/set-password`,
   });
 
   if (error || !data.user) {

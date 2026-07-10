@@ -70,13 +70,20 @@ alone is sufficient.**
 5. Normal application queries (admin dashboard, company dashboard) run through
    a Postgres role that respects RLS (the user's own session/JWT via Supabase),
    **not** the service-role key.
-6. The **service-role key is a server-only secret**, used in exactly three
-   narrow contexts, each of which must manually re-implement scoping since RLS
-   is bypassed:
+6. The **service-role key is a server-only secret**, used in four narrow,
+   explicit contexts, each of which must manually re-implement scoping since
+   RLS is bypassed:
    - Platform Admin routes (inherently cross-tenant; gated by a separate
      `platform_admins` table check, not by org membership).
    - Background job workers (processing documents, etc.).
    - Public widget endpoints (no user session exists — see §4).
+   - The suspended-organization notice check (`lib/auth/suspended.ts`): RLS
+     makes a suspended org's rows invisible even to its own members'
+     RLS-scoped queries (correct for data access), which means
+     `getCompanySession()` can't tell "suspended" apart from "no membership
+     at all." This check exists solely to pick the right login-page message —
+     it returns a boolean only and is never used to return or grant access to
+     tenant data.
    The service-role key must never be imported into any file that can end up
    in a client bundle, and must never be logged.
 7. Platform Admin access is structurally separate from company access — a
@@ -89,6 +96,27 @@ alone is sufficient.**
    application check alone.
 9. **Cross-tenant isolation tests are mandatory** for every module that reads
    or writes tenant data (see §7).
+10. **One active organization per user in Phase 1.** A company user belongs
+    to exactly one organization at a time — enforced by a partial unique
+    index (`memberships_one_active_org_per_user`, on `user_id` where
+    `status = 'active'`), not just an application-layer check. There is no
+    organization-switcher UI and none should be built without first revisiting
+    this rule explicitly. `getCompanySession()` relies on this: it resolves
+    "the" active membership with no ordering guarantee across multiple rows,
+    which is only safe because the database guarantees there's at most one.
+11. **Invitations: Supabase Auth owns the token, not us.** The only way a
+    company user is provisioned in Phase 1 is a platform-admin-triggered
+    invite (`supabase.auth.admin.inviteUserByEmail`, see
+    `modules/organizations/service.ts`'s `createFirstOwner`). We never
+    generate, store, or validate the invite token ourselves — expiry,
+    single-use consumption, and email/identity binding are entirely
+    Supabase's responsibility. `src/app/auth/confirm/route.ts` only asks
+    Supabase "is this token valid" via `verifyOtp` and redirects; it holds no
+    token state. The membership row is created at invite time (by the admin
+    action), not at acceptance time (by the user) — acceptance
+    (`src/app/auth/set-password`) only establishes a session and sets a
+    password, so re-visiting or retrying that step can't create a duplicate
+    membership.
 
 ## 4. Public widget rules
 

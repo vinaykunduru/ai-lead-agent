@@ -12,11 +12,11 @@
 --
 -- The "service_role" Postgres role (used directly by src/db/client.ts's `db`
 -- export) has BYPASSRLS and is not subject to any of this — its use is
--- restricted by convention to the platform-admin module, job workers, and
--- public widget endpoints, each of which must manually scope every query
--- (see CLAUDE.md §3.6). RLS cannot protect against a bug in code that
--- deliberately opts out of RLS, which is exactly why service-role usage is
--- kept to those three narrow, reviewed call sites.
+-- restricted by convention to the platform-admin module, job workers, public
+-- widget endpoints, and the suspended-org notice check, each of which must
+-- manually scope every query (see CLAUDE.md §3.6). RLS cannot protect
+-- against a bug in code that deliberately opts out of RLS, which is exactly
+-- why service-role usage is kept to those four narrow, reviewed call sites.
 
 -- organizations: a company user may read organizations they belong to.
 -- Creating, editing, activating, and suspending companies are platform-admin
