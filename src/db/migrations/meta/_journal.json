@@ -1,0 +1,20 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1783678014727,
+      "tag": "0000_init_organizations_memberships_admins_audit",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1783678053861,
+      "tag": "0001_enable_rls_policies",
+      "breakpoints": true
+    }
+  ]
+}

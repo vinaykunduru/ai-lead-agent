@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  # Placeholder values so `next build` can compile and statically analyze
+  # routes — they don't connect to anything real. Real Supabase credentials
+  # are only needed to actually run the app, and (for integration tests) are
+  # provided via repo secrets below.
+  NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
+  SUPABASE_SERVICE_ROLE_KEY: placeholder-service-role-key
+  DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+  NEXT_PUBLIC_APP_URL: http://localhost:3000
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Unit tests
+        run: pnpm test
+        env:
+          # Cross-tenant isolation integration tests only run when these repo
+          # secrets are configured against a real (ideally disposable/staging)
+          # Supabase project — see CLAUDE.md §7. Without them the suite skips
+          # those tests rather than failing.
+          DATABASE_URL: ${{ secrets.TEST_DATABASE_URL || '' }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.TEST_SUPABASE_SERVICE_ROLE_KEY || '' }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.TEST_SUPABASE_URL || '' }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.TEST_SUPABASE_ANON_KEY || '' }}
+          NEXT_PUBLIC_APP_URL: http://localhost:3000
+
+      - name: Build
+        run: pnpm build
