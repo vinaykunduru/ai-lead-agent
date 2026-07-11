@@ -31,16 +31,22 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "conversations.view",
     "inbox.view",
     "inbox.reply",
+    "analytics.view",
+    "analytics.export",
   ],
 
   // Assigned leads and conversations only. Which leads/conversations an
   // agent may act on is a resource-level (ownership) check performed by the
   // leads/conversations services, not a role permission — see
-  // modules/leads and modules/inbox.
+  // modules/leads and modules/inbox. No analytics access — company-wide
+  // reporting is above an individual agent's scope.
   agent: ["leads.view", "leads.update", "conversations.view", "inbox.view", "inbox.reply"],
 
   // Read-only dashboard access. knowledge.search is included because
   // running a search doesn't mutate anything — it's a read operation.
+  // analytics.view but NOT analytics.export: viewing charts is read-only,
+  // but downloading raw aggregate data to a file is treated as an elevated
+  // action, same posture as every other write-shaped permission viewer lacks.
   viewer: [
     "company.view",
     "users.view",
@@ -51,5 +57,6 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "ai.view",
     "widget.view",
     "inbox.view",
+    "analytics.view",
   ],
 };

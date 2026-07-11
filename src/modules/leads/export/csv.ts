@@ -1,3 +1,4 @@
+import { escapeCsvField } from "@/shared/lib/csv";
 import type { LeadExportProvider, LeadExportRecord } from "./types";
 
 const COLUMNS: { header: string; value: (r: LeadExportRecord) => string }[] = [
@@ -13,13 +14,6 @@ const COLUMNS: { header: string; value: (r: LeadExportRecord) => string }[] = [
   { header: "Next Action", value: (r) => r.summary?.recommendedNextAction ?? "" },
   { header: "Created At", value: (r) => r.createdAt },
 ];
-
-function escapeCsvField(value: string): string {
-  if (/[",\n]/.test(value)) {
-    return `"${value.replace(/"/g, '""')}"`;
-  }
-  return value;
-}
 
 /**
  * The one concrete LeadExportProvider this milestone implements — a plain,

@@ -109,6 +109,17 @@ describe("permissions", () => {
     expect(hasPermission("viewer", "leads.delete")).toBe(false);
   });
 
+  it("owner, admin, and manager can view and export analytics; viewer can view but not export; agent has no analytics access", () => {
+    for (const role of ["owner", "admin", "manager"] as const) {
+      expect(hasPermission(role, "analytics.view")).toBe(true);
+      expect(hasPermission(role, "analytics.export")).toBe(true);
+    }
+    expect(hasPermission("viewer", "analytics.view")).toBe(true);
+    expect(hasPermission("viewer", "analytics.export")).toBe(false);
+    expect(hasPermission("agent", "analytics.view")).toBe(false);
+    expect(hasPermission("agent", "analytics.export")).toBe(false);
+  });
+
   it("can() defers entirely to the role map, no other logic", () => {
     for (const role of Object.keys(ROLE_PERMISSIONS) as (keyof typeof ROLE_PERMISSIONS)[]) {
       for (const permission of PERMISSIONS) {

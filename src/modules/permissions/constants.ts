@@ -25,6 +25,8 @@ export const PERMISSIONS = [
   "widget.update",
   "widget.delete",
   "widget.publish",
+  "analytics.view",
+  "analytics.export",
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];

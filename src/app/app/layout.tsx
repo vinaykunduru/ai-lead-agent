@@ -6,6 +6,7 @@ import { DashboardShell, type NavItem } from "@/shared/components/dashboard-shel
 
 const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "/app" },
+  { label: "Analytics", href: "/app/analytics" },
   { label: "Leads", href: "/app/leads" },
   { label: "Inbox", href: "/app/inbox" },
   { label: "Conversations", href: "/app/conversations" },

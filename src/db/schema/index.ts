@@ -30,3 +30,5 @@ export * from "./lead-assignments";
 export * from "./lead-stage-history";
 export * from "./lead-scores";
 export * from "./lead-activity";
+export * from "./analytics-alert-rules";
+export * from "./dashboard-preferences";
