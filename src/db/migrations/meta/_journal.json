@@ -92,6 +92,20 @@
       "when": 1783760900000,
       "tag": "0012_conversation_engine_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1783777349114,
+      "tag": "0013_lead_management_tables",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1783777400000,
+      "tag": "0014_lead_management_rls",
+      "breakpoints": true
     }
   ]
 }

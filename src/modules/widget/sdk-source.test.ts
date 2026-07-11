@@ -18,6 +18,20 @@ describe("WIDGET_SDK_SOURCE", () => {
     expect(WIDGET_SDK_SOURCE).toContain("visitorId");
   });
 
+  it("polls for new messages (e.g. a human agent's Inbox reply) via a plain GET, not a WebSocket", () => {
+    expect(WIDGET_SDK_SOURCE).toContain("/api/widget/conversations/");
+    expect(WIDGET_SDK_SOURCE).toContain("/messages?key=");
+    expect(WIDGET_SDK_SOURCE).toContain("setInterval");
+  });
+
+  it("dedupes polled messages against ones it already rendered itself", () => {
+    expect(WIDGET_SDK_SOURCE).toContain("seenMessageIds");
+  });
+
+  it("handles the handoff event (Human Takeover) without treating it as an error", () => {
+    expect(WIDGET_SDK_SOURCE).toContain('"handoff"');
+  });
+
   it("never references a service key, secret, or database credential", () => {
     const forbidden = ["SUPABASE_SERVICE_ROLE", "DATABASE_URL", "service_role", "secret", "organizationId"];
     for (const term of forbidden) {

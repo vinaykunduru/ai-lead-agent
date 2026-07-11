@@ -4,10 +4,12 @@ import { db } from "@/db/client";
 import {
   aiBusinessHours,
   aiBusinessRules,
+  aiHandoffSettings,
   aiLeadQuestions,
   aiProfiles,
   type AiBusinessHours,
   type AiBusinessRule,
+  type AiHandoffSettings,
   type AiLeadQuestion,
   type AiProfile,
 } from "@/db/schema";
@@ -86,6 +88,39 @@ function defaultAiProfile(organizationId: string): AiProfile {
     fallbackLanguage: "en",
     safetyFallbackMessage: null,
     aiProvider: "claude",
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+/**
+ * Same read-only, service-role, org-scoped pattern as
+ * loadAiBehaviourForConversation, for Human Takeover's automatic-escalation
+ * check (modules/conversation/execution-pipeline.ts) — this table has
+ * existed since the AI Behaviour milestone but was documented there as
+ * "does not implement escalation delivery; that belongs to the future
+ * conversation-engine phase." This is that phase.
+ */
+export async function loadHandoffSettingsForConversation(organizationId: string): Promise<AiHandoffSettings> {
+  const [settings] = await db
+    .select()
+    .from(aiHandoffSettings)
+    .where(eq(aiHandoffSettings.organizationId, organizationId))
+    .limit(1);
+  return settings ?? defaultHandoffSettings(organizationId);
+}
+
+// Mirrors db/schema/ai-handoff-settings.ts's column defaults.
+function defaultHandoffSettings(organizationId: string): AiHandoffSettings {
+  const now = new Date();
+  return {
+    id: "00000000-0000-0000-0000-000000000000",
+    organizationId,
+    escalationEnabled: false,
+    escalationEmail: null,
+    escalationMessage: null,
+    manualReviewRequired: false,
+    maxAiAttempts: 3,
     createdAt: now,
     updatedAt: now,
   };

@@ -26,7 +26,9 @@ describe("permissions", () => {
         p.endsWith(".update") ||
         p.endsWith(".delete") ||
         p.endsWith(".reprocess") ||
-        p.endsWith(".publish"),
+        p.endsWith(".publish") ||
+        p.endsWith(".assign") ||
+        p.endsWith(".reply"),
     );
     for (const permission of writePermissions) {
       expect(hasPermission("viewer", permission)).toBe(false);
@@ -51,7 +53,10 @@ describe("permissions", () => {
   });
 
   it("manager can manage leads but not knowledge, ai behaviour, or the widget", () => {
-    expect(hasPermission("manager", "leads.manage")).toBe(true);
+    expect(hasPermission("manager", "leads.create")).toBe(true);
+    expect(hasPermission("manager", "leads.update")).toBe(true);
+    expect(hasPermission("manager", "leads.assign")).toBe(true);
+    expect(hasPermission("manager", "leads.delete")).toBe(false);
     expect(hasPermission("manager", "conversations.view")).toBe(true);
     expect(hasPermission("manager", "knowledge.view")).toBe(false);
     expect(hasPermission("manager", "knowledge.create")).toBe(false);
@@ -79,6 +84,29 @@ describe("permissions", () => {
       expect(hasPermission("manager", permission)).toBe(false);
       expect(hasPermission("agent", permission)).toBe(false);
     }
+  });
+
+  it("agents and managers can view and reply in the inbox, but viewer cannot reply", () => {
+    expect(hasPermission("agent", "inbox.view")).toBe(true);
+    expect(hasPermission("agent", "inbox.reply")).toBe(true);
+    expect(hasPermission("manager", "inbox.view")).toBe(true);
+    expect(hasPermission("manager", "inbox.reply")).toBe(true);
+    expect(hasPermission("viewer", "inbox.view")).toBe(true);
+    expect(hasPermission("viewer", "inbox.reply")).toBe(false);
+  });
+
+  it("agents can update leads (resource-scoped to their own assignments at the service layer)", () => {
+    expect(hasPermission("agent", "leads.update")).toBe(true);
+    expect(hasPermission("agent", "leads.assign")).toBe(false);
+    expect(hasPermission("agent", "leads.delete")).toBe(false);
+  });
+
+  it("only owner and admin can delete leads", () => {
+    expect(hasPermission("owner", "leads.delete")).toBe(true);
+    expect(hasPermission("admin", "leads.delete")).toBe(true);
+    expect(hasPermission("manager", "leads.delete")).toBe(false);
+    expect(hasPermission("agent", "leads.delete")).toBe(false);
+    expect(hasPermission("viewer", "leads.delete")).toBe(false);
   });
 
   it("can() defers entirely to the role map, no other logic", () => {

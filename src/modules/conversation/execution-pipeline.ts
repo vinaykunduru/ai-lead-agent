@@ -1,6 +1,9 @@
 import "server-only";
+import { and, eq, isNotNull } from "drizzle-orm";
+import { db } from "@/db/client";
+import { conversationMessages, conversations } from "@/db/schema";
 import { resolveWidgetForPublicRequest } from "@/modules/widget/resolve-public-request";
-import { loadAiBehaviourForConversation } from "@/modules/ai-behaviour/conversation-config";
+import { loadAiBehaviourForConversation, loadHandoffSettingsForConversation } from "@/modules/ai-behaviour/conversation-config";
 import { retrieveKnowledgeForConversation } from "@/modules/knowledge/search-service";
 import { generateSystemPrompt } from "@/modules/ai-behaviour/prompt-generator";
 import { renderStructuredPrompt } from "@/modules/ai-behaviour/rendering";
@@ -11,11 +14,15 @@ import { insertMessage, listMessages, updateMessage } from "./message-service";
 import { buildHistoryWindow } from "./memory";
 import { confidenceFromSimilarity, recordCitations } from "./citations";
 import { recordUsage } from "./usage-service";
+import { findLeadIdForConversation } from "@/modules/inbox/shared";
+import { recordActivity } from "@/modules/leads/activity";
+import { recordAuditLog } from "@/modules/audit/service";
 import type { ConversationTransport } from "./transport/types";
 import type { SendMessageInput } from "./validation";
 
 const MAX_ERROR_MESSAGE_LENGTH = 500;
 const GENERIC_PROVIDER_ERROR = "The assistant could not generate a response right now.";
+const DEFAULT_HANDOFF_MESSAGE = "Thanks for your message — a team member will get back to you shortly.";
 
 /**
  * The full execution pipeline (module spec §8):
@@ -50,6 +57,16 @@ export async function handleIncomingMessage(
     content: input.message,
     status: "complete",
   });
+
+  // Human Takeover (module spec §6): a human already owns this
+  // conversation — store the visitor's message (above) and stop. The AI
+  // never answers again until modules/inbox/takeover-service.ts's
+  // resumeAiConversation flips ownership back.
+  if (conversation.owner === "human") {
+    await touchActivity(session.id, conversation.id);
+    transport.send({ type: "handoff", message: DEFAULT_HANDOFF_MESSAGE });
+    return;
+  }
 
   // Load AI Behaviour
   const behaviourConfig = await loadAiBehaviourForConversation(widget.organizationId);
@@ -175,6 +192,23 @@ export async function handleIncomingMessage(
     latencyMs,
   });
 
+  // Automatic escalation (module spec §6): ai_handoff_settings has existed
+  // since the AI Behaviour milestone documented as "does not implement
+  // escalation delivery; that belongs to the future conversation-engine
+  // phase" — this is that phase. Counts every AI-authored assistant
+  // message in the conversation so far; once it reaches maxAiAttempts, the
+  // conversation hands off to a human the same way a manual takeover does.
+  const handoffSettings = await loadHandoffSettingsForConversation(widget.organizationId);
+  if (handoffSettings.escalationEnabled) {
+    const aiMessageCount = await countAiAuthoredMessages(conversation.id);
+    if (aiMessageCount >= handoffSettings.maxAiAttempts) {
+      await escalateToHuman(widget.organizationId, conversation.id);
+      if (handoffSettings.escalationMessage) {
+        transport.send({ type: "token", text: `\n\n${handoffSettings.escalationMessage}` });
+      }
+    }
+  }
+
   // Widget decides later whether to display citations — the event is sent
   // regardless; the current SDK just doesn't render it (module spec §7).
   const topCitations = retrievedChunks.slice(0, 3);
@@ -192,4 +226,59 @@ export async function handleIncomingMessage(
   // Return
   transport.send({ type: "done", messageId: assistantMessage.id, promptTokens, completionTokens });
   await touchActivity(session.id, conversation.id);
+}
+
+async function countAiAuthoredMessages(conversationId: string): Promise<number> {
+  const rows = await db
+    .select({ id: conversationMessages.id })
+    .from(conversationMessages)
+    .where(
+      and(
+        eq(conversationMessages.conversationId, conversationId),
+        eq(conversationMessages.role, "assistant"),
+        isNotNull(conversationMessages.provider),
+      ),
+    );
+  return rows.length;
+}
+
+/**
+ * Service-role, same shape as modules/inbox/takeover-service.ts's manual
+ * takeoverConversation — deliberately not reusing that function directly
+ * since it's RLS-scoped (requireCompanySession) and this runs from the
+ * visitor-facing pipeline, which has no company session. Both end up
+ * setting the exact same fields.
+ */
+async function escalateToHuman(organizationId: string, conversationId: string): Promise<void> {
+  // Plain service-role transaction (not withRlsContext — there is no
+  // company user here) purely so recordActivity/findLeadIdForConversation
+  // get a transaction handle of the same type they use in every other,
+  // RLS-scoped call site.
+  await db.transaction(async (tx) => {
+    await tx
+      .update(conversations)
+      .set({ owner: "human", takeoverReason: "automatic", takeoverAt: new Date(), updatedAt: new Date() })
+      .where(eq(conversations.id, conversationId));
+
+    const leadId = await findLeadIdForConversation(tx, organizationId, conversationId);
+    if (leadId) {
+      await recordActivity(tx, {
+        organizationId,
+        leadId,
+        type: "escalated",
+        actorUserId: null,
+        metadata: { reason: "automatic" },
+      });
+    }
+  });
+
+  await recordAuditLog({
+    organizationId,
+    actorUserId: null,
+    actorType: "system",
+    action: "inbox.escalated",
+    resourceType: "conversation",
+    resourceId: conversationId,
+    metadata: { reason: "automatic" },
+  });
 }

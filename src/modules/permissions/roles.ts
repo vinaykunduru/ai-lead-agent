@@ -18,13 +18,26 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   // Everything except ownership-level actions.
   admin: ALL_PERMISSIONS.filter((permission) => permission !== "company.manage"),
 
-  // Leads, conversations, team visibility, and reports.
-  manager: ["company.view", "users.view", "leads.view", "leads.manage", "conversations.view"],
+  // Leads, conversations, team visibility, and reports. No leads.delete —
+  // matches the widget.delete pattern (owner/admin only), granted only via
+  // ALL_PERMISSIONS above.
+  manager: [
+    "company.view",
+    "users.view",
+    "leads.view",
+    "leads.create",
+    "leads.update",
+    "leads.assign",
+    "conversations.view",
+    "inbox.view",
+    "inbox.reply",
+  ],
 
   // Assigned leads and conversations only. Which leads/conversations an
   // agent may act on is a resource-level (ownership) check performed by the
-  // leads/conversations services, not a role permission.
-  agent: ["leads.view", "conversations.view"],
+  // leads/conversations services, not a role permission — see
+  // modules/leads and modules/inbox.
+  agent: ["leads.view", "leads.update", "conversations.view", "inbox.view", "inbox.reply"],
 
   // Read-only dashboard access. knowledge.search is included because
   // running a search doesn't mutate anything — it's a read operation.
@@ -37,5 +50,6 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "knowledge.search",
     "ai.view",
     "widget.view",
+    "inbox.view",
   ],
 };

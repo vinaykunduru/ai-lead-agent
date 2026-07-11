@@ -18,7 +18,12 @@ export type ConversationStreamEvent =
   | { type: "token"; text: string }
   | { type: "citations"; citations: PublicCitation[] }
   | { type: "done"; messageId: string; promptTokens: number; completionTokens: number }
-  | { type: "error"; message: string };
+  | { type: "error"; message: string }
+  // Human Takeover (module spec §6): sent instead of any token/done events
+  // when a human already owns this conversation — the visitor's message is
+  // still stored, but the AI does not generate a reply. See
+  // modules/inbox/takeover-service.ts and execution-pipeline.ts.
+  | { type: "handoff"; message: string };
 
 /**
  * The transport abstraction (module spec §9): the execution pipeline only

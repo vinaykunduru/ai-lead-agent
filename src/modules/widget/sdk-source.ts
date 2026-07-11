@@ -24,6 +24,13 @@
  * `Origin` header against the widget's allowed domains) — the browser
  * attaches that header automatically; the SDK itself does not and cannot
  * forge it.
+ *
+ * As of the Lead Management + Human Inbox milestone: also polls
+ * GET /api/widget/conversations/:id/messages every few seconds while the
+ * panel is open, so a reply a human agent sends from the Inbox (module
+ * spec §6 "Human Takeover") actually reaches the visitor. This is a
+ * separate, plain GET+JSON endpoint — not a WebSocket, not a change to the
+ * SSE transport or the streaming execution pipeline.
  */
 export const WIDGET_SDK_SOURCE = `(function () {
   "use strict";
@@ -40,8 +47,10 @@ export const WIDGET_SDK_SOURCE = `(function () {
   var scriptUrl = new URL(currentScript.src, window.location.href);
   var apiBase = scriptUrl.origin;
 
-  var state = { conversationId: null, sending: false };
+  var state = { conversationId: null, sending: false, lastMessageAt: null, seenMessageIds: {} };
   var fallbackVisitorId = null;
+  var pollTimer = null;
+  var POLL_INTERVAL_MS = 4000;
 
   function fallbackUuid() {
     return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function (c) {
@@ -175,17 +184,24 @@ export const WIDGET_SDK_SOURCE = `(function () {
         return readSseStream(response.body, function (event) {
           if (event.type === "ready") {
             state.conversationId = event.conversationId;
+            startPolling(elements, config);
           } else if (event.type === "token") {
             assistant.root.classList.remove("ai-widget-typing");
             assistant.textEl.textContent += event.text;
             elements.messages.scrollTop = elements.messages.scrollHeight;
+          } else if (event.type === "handoff") {
+            assistant.root.classList.remove("ai-widget-typing");
+            assistant.textEl.textContent = event.message;
           } else if (event.type === "error") {
             assistant.root.classList.remove("ai-widget-typing");
             assistant.root.classList.add("ai-widget-error");
             assistant.textEl.textContent = event.message;
+          } else if (event.type === "done") {
+            if (event.messageId) state.seenMessageIds[event.messageId] = true;
+            state.lastMessageAt = new Date().toISOString();
           }
-          // "citations"/"done": no UI action yet — the widget doesn't
-          // render citations in this phase (module spec §7).
+          // "citations": no UI action yet — the widget doesn't render
+          // citations in this phase (module spec §7).
         });
       })
       .catch(function () {
@@ -198,6 +214,43 @@ export const WIDGET_SDK_SOURCE = `(function () {
         state.sending = false;
         elements.sendButton.disabled = false;
       });
+  }
+
+  // Picks up replies the widget didn't already render itself — chiefly a
+  // human agent's reply sent from the Inbox, which has no SSE stream of
+  // its own to deliver over (module spec §6). Only ever adds messages this
+  // page hasn't already shown (state.seenMessageIds), so it never
+  // duplicates the current turn's own streamed response.
+  function startPolling(elements, config) {
+    if (pollTimer || !state.conversationId) return;
+    pollTimer = setInterval(function () {
+      var url =
+        apiBase +
+        "/api/widget/conversations/" +
+        state.conversationId +
+        "/messages?key=" +
+        encodeURIComponent(publicKey) +
+        (state.lastMessageAt ? "&after=" + encodeURIComponent(state.lastMessageAt) : "");
+
+      fetch(url, { credentials: "omit" })
+        .then(function (response) {
+          return response.ok ? response.json() : { messages: [] };
+        })
+        .then(function (data) {
+          (data.messages || []).forEach(function (message) {
+            state.lastMessageAt = message.createdAt;
+            if (state.seenMessageIds[message.id]) return;
+            state.seenMessageIds[message.id] = true;
+            if (message.role === "assistant") {
+              appendBubble(elements.messages, "assistant", config).textEl.textContent = message.content;
+            }
+          });
+        })
+        .catch(function () {
+          // A failed poll just tries again next interval — never surfaces
+          // as a visible error for a background refresh.
+        });
+    }, POLL_INTERVAL_MS);
   }
 
   function renderShell(container, config) {
