@@ -19,7 +19,14 @@ describe("permissions", () => {
   });
 
   it("viewer cannot perform any write action", () => {
-    const writePermissions = PERMISSIONS.filter((p) => p.endsWith(".manage"));
+    const writePermissions = PERMISSIONS.filter(
+      (p) =>
+        p.endsWith(".manage") ||
+        p.endsWith(".create") ||
+        p.endsWith(".update") ||
+        p.endsWith(".delete") ||
+        p.endsWith(".reprocess"),
+    );
     for (const permission of writePermissions) {
       expect(hasPermission("viewer", permission)).toBe(false);
     }
@@ -45,7 +52,8 @@ describe("permissions", () => {
   it("manager can manage leads but not knowledge, ai behaviour, or the widget", () => {
     expect(hasPermission("manager", "leads.manage")).toBe(true);
     expect(hasPermission("manager", "conversations.view")).toBe(true);
-    expect(hasPermission("manager", "knowledge.manage")).toBe(false);
+    expect(hasPermission("manager", "knowledge.view")).toBe(false);
+    expect(hasPermission("manager", "knowledge.create")).toBe(false);
     expect(hasPermission("manager", "ai_behavior.manage")).toBe(false);
     expect(hasPermission("manager", "widget.manage")).toBe(false);
     expect(hasPermission("manager", "users.manage")).toBe(false);

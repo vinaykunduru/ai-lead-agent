@@ -1,8 +1,9 @@
 import "server-only";
-import { desc, eq } from "drizzle-orm";
-import { db } from "@/db/client";
+import { and, desc, eq } from "drizzle-orm";
+import { db, withRlsContext } from "@/db/client";
 import { auditLogs, type AuditLog } from "@/db/schema";
 import { requirePlatformAdmin } from "@/lib/auth/platform-admin";
+import { requireCompanySession } from "@/lib/auth/session";
 
 export type AuditActorType = "platform_admin" | "company_user" | "system";
 
@@ -51,4 +52,29 @@ export async function listAuditLogs(filter?: { organizationId?: string }): Promi
   }
 
   return query;
+}
+
+/**
+ * Company-side audit history for a specific resource (e.g. a Knowledge
+ * Base document's "Audit History" section). RLS-scoped, not
+ * service-role — see db/migrations/0006 for why this is the RLS path
+ * rather than a new bypass exception.
+ */
+export async function listResourceAuditLogs(resourceType: string, resourceId: string): Promise<AuditLog[]> {
+  const session = await requireCompanySession();
+
+  return withRlsContext(session.userId, (tx) =>
+    tx
+      .select()
+      .from(auditLogs)
+      .where(
+        and(
+          eq(auditLogs.organizationId, session.organizationId),
+          eq(auditLogs.resourceType, resourceType),
+          eq(auditLogs.resourceId, resourceId),
+        ),
+      )
+      .orderBy(desc(auditLogs.createdAt))
+      .limit(AUDIT_LOG_PAGE_SIZE),
+  );
 }

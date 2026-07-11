@@ -21,7 +21,7 @@ const queryClient = postgres(serverEnv.DATABASE_URL, { prepare: false });
  */
 export const db = drizzle(queryClient, { schema });
 
-type RlsDb = Parameters<Parameters<typeof db.transaction>[0]>[0];
+export type RlsDb = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 /**
  * Runs `callback` inside a Postgres transaction with the session role

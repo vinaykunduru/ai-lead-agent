@@ -29,6 +29,27 @@
       "when": 1783707881929,
       "tag": "0003_fix_memberships_rls_recursion",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1783711308393,
+      "tag": "0004_knowledge_base_tables",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1783711383929,
+      "tag": "0005_knowledge_base_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1783739101338,
+      "tag": "0006_audit_logs_company_read_access",
+      "breakpoints": true
     }
   ]
 }

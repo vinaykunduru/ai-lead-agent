@@ -3,3 +3,7 @@ export * from "./organizations";
 export * from "./platform-admins";
 export * from "./memberships";
 export * from "./audit-logs";
+export * from "./knowledge-collections";
+export * from "./knowledge-documents";
+export * from "./knowledge-chunks";
+export * from "./knowledge-search-logs";

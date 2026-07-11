@@ -26,13 +26,15 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   // leads/conversations services, not a role permission.
   agent: ["leads.view", "conversations.view"],
 
-  // Read-only dashboard access.
+  // Read-only dashboard access. knowledge.search is included because
+  // running a search doesn't mutate anything — it's a read operation.
   viewer: [
     "company.view",
     "users.view",
     "leads.view",
     "conversations.view",
     "knowledge.view",
+    "knowledge.search",
     "ai_behavior.view",
     "widget.view",
   ],
