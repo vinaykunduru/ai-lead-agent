@@ -138,4 +138,17 @@ describe("playgroundTestSchema", () => {
       playgroundTestSchema.safeParse({ message: "hi", personalityOverride: "mysterious" }).success,
     ).toBe(false);
   });
+
+  it("defaults renderer to openai when omitted", () => {
+    const result = playgroundTestSchema.safeParse({ message: "hi" });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.renderer).toBe("openai");
+  });
+
+  it("accepts every known renderer id and rejects an unknown one", () => {
+    for (const renderer of ["openai", "claude", "gemini", "llama"]) {
+      expect(playgroundTestSchema.safeParse({ message: "hi", renderer }).success).toBe(true);
+    }
+    expect(playgroundTestSchema.safeParse({ message: "hi", renderer: "cohere" }).success).toBe(false);
+  });
 });

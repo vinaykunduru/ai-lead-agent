@@ -6,8 +6,9 @@ import { getAiProfile } from "./profile-service";
 import { listBusinessRules } from "./business-rules-service";
 import { listLeadQuestions } from "./lead-questions-service";
 import { getBusinessHours } from "./business-hours-service";
-import { generateSystemPrompt, type SystemPromptConfig } from "./prompt-generator";
+import { generateSystemPrompt, type StructuredPrompt } from "./prompt-generator";
 import { isWithinBusinessHours } from "./business-hours-utils";
+import { renderStructuredPrompt, type PromptRendererId } from "./rendering";
 import type { AiProfile } from "@/db/schema";
 import type { PlaygroundTestInput } from "./validation";
 
@@ -19,7 +20,10 @@ export type PlaygroundTestResult = {
    * engine would use, once that engine exists in a later phase.
    */
   mockReply: string;
-  promptPreview: SystemPromptConfig;
+  promptPreview: StructuredPrompt;
+  /** The same promptPreview, rendered as vendor-specific text — never the
+   * generator itself doing vendor formatting, see ./rendering. */
+  renderedPrompt: { rendererId: PromptRendererId; text: string };
   appliedLanguage: string;
   appliedPersonality: AiProfile["personalityType"];
   withinBusinessHours: boolean;
@@ -60,10 +64,13 @@ export async function runPlaygroundTest(input: PlaygroundTestInput): Promise<Pla
   const enabledRuleCount = promptPreview.businessRules.length;
   const mockReply = [
     "[Preview only — no AI provider is called in Phase 3]",
-    `${promptPreview.identity.assistantName} would reply in a "${appliedPersonality}" tone (${promptPreview.responseSettings.detail} detail, ${appliedLanguage}), `,
+    `${promptPreview.identity.assistantName} would reply in a "${appliedPersonality}" tone (${promptPreview.behaviour.responseSettings.detail} detail, ${appliedLanguage}), `,
     `applying ${enabledRuleCount} active business rule${enabledRuleCount === 1 ? "" : "s"}`,
     withinBusinessHours ? " during business hours." : " outside business hours.",
   ].join("");
+
+  const rendererId = input.renderer;
+  const renderedPrompt = { rendererId, text: renderStructuredPrompt(rendererId, promptPreview) };
 
   await recordAuditLog({
     organizationId: session.organizationId,
@@ -73,8 +80,8 @@ export async function runPlaygroundTest(input: PlaygroundTestInput): Promise<Pla
     resourceType: "ai_profile",
     resourceId: profile.id,
     // Never the visitor-authored message or any generated reply text.
-    metadata: { language: appliedLanguage, personality: appliedPersonality },
+    metadata: { language: appliedLanguage, personality: appliedPersonality, renderer: rendererId },
   });
 
-  return { mockReply, promptPreview, appliedLanguage, appliedPersonality, withinBusinessHours };
+  return { mockReply, promptPreview, renderedPrompt, appliedLanguage, appliedPersonality, withinBusinessHours };
 }

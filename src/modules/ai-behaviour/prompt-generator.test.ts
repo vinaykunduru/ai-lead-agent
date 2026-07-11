@@ -100,8 +100,8 @@ describe("generateSystemPrompt", () => {
       companySummary: "We sell gardening tools.",
       role: "Sales Assistant",
     });
-    expect(result.personality.type).toBe("friendly");
-    expect(result.responseSettings.maxResponseLength).toBe(500);
+    expect(result.behaviour.personality.type).toBe("friendly");
+    expect(result.behaviour.responseSettings.maxResponseLength).toBe(500);
     expect(result.language.primary).toBe("en");
     expect(result.language.supported).toEqual(["en", "es"]);
   });
@@ -142,7 +142,7 @@ describe("generateSystemPrompt", () => {
       leadQuestions: [],
       businessHours: makeBusinessHours(),
     });
-    expect(result.safety.fallbackMessage).toBe(DEFAULT_SAFETY_FALLBACK_MESSAGE);
+    expect(result.guardrails.fallbackMessage).toBe(DEFAULT_SAFETY_FALLBACK_MESSAGE);
   });
 
   it("uses the company's configured safety fallback message when set", () => {
@@ -152,7 +152,7 @@ describe("generateSystemPrompt", () => {
       leadQuestions: [],
       businessHours: makeBusinessHours(),
     });
-    expect(result.safety.fallbackMessage).toBe("Let me check with the team.");
+    expect(result.guardrails.fallbackMessage).toBe("Let me check with the team.");
   });
 
   it("always includes the fixed platform guardrails, regardless of company configuration", () => {
@@ -162,17 +162,17 @@ describe("generateSystemPrompt", () => {
       leadQuestions: [],
       businessHours: makeBusinessHours(),
     });
-    expect(result.safety.platformGuardrails).toEqual(PLATFORM_SAFETY_GUARDRAILS);
+    expect(result.guardrails.platformRules).toEqual(PLATFORM_SAFETY_GUARDRAILS);
   });
 
-  it("carries business hours through unchanged", () => {
+  it("carries business hours through unchanged, nested under behaviour", () => {
     const result = generateSystemPrompt({
       profile: makeProfile(),
       businessRules: [],
       leadQuestions: [],
       businessHours: makeBusinessHours({ holidayMode: true, timezone: "America/New_York" }),
     });
-    expect(result.businessHours.holidayMode).toBe(true);
-    expect(result.businessHours.timezone).toBe("America/New_York");
+    expect(result.behaviour.businessHours.holidayMode).toBe(true);
+    expect(result.behaviour.businessHours.timezone).toBe("America/New_York");
   });
 });

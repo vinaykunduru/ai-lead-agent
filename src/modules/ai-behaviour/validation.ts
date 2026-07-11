@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { PROMPT_RENDERER_IDS } from "./rendering/types";
 
 export const PERSONALITY_TYPES = [
   "professional",
@@ -100,5 +101,6 @@ export const playgroundTestSchema = z.object({
   message: z.string().trim().min(1).max(2000),
   language: z.string().trim().min(2).max(10).optional(),
   personalityOverride: z.enum(PERSONALITY_TYPES).optional(),
+  renderer: z.enum(PROMPT_RENDERER_IDS).default("openai"),
 });
 export type PlaygroundTestInput = z.infer<typeof playgroundTestSchema>;

@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PERSONALITY_TYPES } from "@/modules/ai-behaviour/validation";
+import { PROMPT_RENDERER_IDS, type PromptRendererId } from "@/modules/ai-behaviour/rendering";
 import type { PlaygroundTestResult } from "@/modules/ai-behaviour/playground-service";
 import type { AiProfile } from "@/db/schema";
 
@@ -23,10 +24,18 @@ const PERSONALITY_LABELS: Record<string, string> = {
   custom: "Custom",
 };
 
+const RENDERER_LABELS: Record<PromptRendererId, string> = {
+  openai: "OpenAI",
+  claude: "Claude",
+  gemini: "Gemini",
+  llama: "Llama",
+};
+
 export function PlaygroundForm({ profile, canTest }: { profile: AiProfile; canTest: boolean }) {
   const [message, setMessage] = useState("");
   const [language, setLanguage] = useState(profile.primaryLanguage);
   const [personality, setPersonality] = useState<string>(profile.personalityType);
+  const [renderer, setRenderer] = useState<PromptRendererId>("openai");
   const [pending, setPending] = useState(false);
   const [result, setResult] = useState<PlaygroundTestResult | null>(null);
 
@@ -43,7 +52,12 @@ export function PlaygroundForm({ profile, canTest }: { profile: AiProfile; canTe
     const res = await fetch("/api/ai-behaviour/playground", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: message.trim(), language, personalityOverride: personality }),
+      body: JSON.stringify({
+        message: message.trim(),
+        language,
+        personalityOverride: personality,
+        renderer,
+      }),
     });
     setPending(false);
     if (!res.ok) {
@@ -85,7 +99,7 @@ export function PlaygroundForm({ profile, canTest }: { profile: AiProfile; canTe
               onChange={(e) => setMessage(e.target.value)}
             />
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div className="space-y-2">
               <Label htmlFor="playground-language">Language</Label>
               <Select value={language} onValueChange={(v) => setLanguage(v ?? language)}>
@@ -116,6 +130,21 @@ export function PlaygroundForm({ profile, canTest }: { profile: AiProfile; canTe
                 </SelectContent>
               </Select>
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="playground-renderer">Preview format</Label>
+              <Select value={renderer} onValueChange={(v) => setRenderer((v ?? renderer) as PromptRendererId)}>
+                <SelectTrigger id="playground-renderer" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {PROMPT_RENDERER_IDS.map((id) => (
+                    <SelectItem key={id} value={id}>
+                      {RENDERER_LABELS[id]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
           <Button type="button" disabled={pending} onClick={runTest}>
             {pending ? "Running preview..." : "Preview"}
@@ -141,9 +170,20 @@ export function PlaygroundForm({ profile, canTest }: { profile: AiProfile; canTe
             <p className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
               {result.mockReply}
             </p>
+
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-muted-foreground">
+                Rendered for {RENDERER_LABELS[result.renderedPrompt.rendererId]} — this is what a future chat
+                engine would send as the system prompt, never assembled by this screen directly.
+              </p>
+              <pre className="max-h-96 overflow-auto rounded-md bg-muted p-3 text-xs whitespace-pre-wrap">
+                {result.renderedPrompt.text}
+              </pre>
+            </div>
+
             <details>
               <summary className="cursor-pointer text-sm font-medium text-muted-foreground">
-                Assembled configuration (what a future chat engine would receive)
+                Raw structured configuration (provider-independent)
               </summary>
               <pre className="mt-2 max-h-96 overflow-auto rounded-md bg-muted p-3 text-xs">
                 {JSON.stringify(result.promptPreview, null, 2)}
