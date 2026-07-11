@@ -50,6 +50,20 @@
       "when": 1783739101338,
       "tag": "0006_audit_logs_company_read_access",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1783742142475,
+      "tag": "0007_ai_behaviour_tables",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1783742200000,
+      "tag": "0008_ai_behaviour_rls",
+      "breakpoints": true
     }
   ]
 }

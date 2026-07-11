@@ -37,7 +37,7 @@ describe("permissions", () => {
     expect(hasPermission("viewer", "leads.view")).toBe(true);
     expect(hasPermission("viewer", "conversations.view")).toBe(true);
     expect(hasPermission("viewer", "knowledge.view")).toBe(true);
-    expect(hasPermission("viewer", "ai_behavior.view")).toBe(true);
+    expect(hasPermission("viewer", "ai.view")).toBe(true);
     expect(hasPermission("viewer", "widget.view")).toBe(true);
   });
 
@@ -54,9 +54,20 @@ describe("permissions", () => {
     expect(hasPermission("manager", "conversations.view")).toBe(true);
     expect(hasPermission("manager", "knowledge.view")).toBe(false);
     expect(hasPermission("manager", "knowledge.create")).toBe(false);
-    expect(hasPermission("manager", "ai_behavior.manage")).toBe(false);
+    expect(hasPermission("manager", "ai.update")).toBe(false);
     expect(hasPermission("manager", "widget.manage")).toBe(false);
     expect(hasPermission("manager", "users.manage")).toBe(false);
+  });
+
+  it("only owner and admin can update AI Behaviour configuration or use the playground", () => {
+    expect(hasPermission("owner", "ai.update")).toBe(true);
+    expect(hasPermission("owner", "ai.test")).toBe(true);
+    expect(hasPermission("admin", "ai.update")).toBe(true);
+    expect(hasPermission("admin", "ai.test")).toBe(true);
+    expect(hasPermission("viewer", "ai.update")).toBe(false);
+    expect(hasPermission("viewer", "ai.test")).toBe(false);
+    expect(hasPermission("manager", "ai.test")).toBe(false);
+    expect(hasPermission("agent", "ai.view")).toBe(false);
   });
 
   it("can() defers entirely to the role map, no other logic", () => {

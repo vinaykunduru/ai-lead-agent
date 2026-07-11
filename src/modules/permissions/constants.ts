@@ -12,8 +12,9 @@ export const PERMISSIONS = [
   "knowledge.delete",
   "knowledge.search",
   "knowledge.reprocess",
-  "ai_behavior.view",
-  "ai_behavior.manage",
+  "ai.view",
+  "ai.update",
+  "ai.test",
   "widget.view",
   "widget.manage",
 ] as const;

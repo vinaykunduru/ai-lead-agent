@@ -11,7 +11,7 @@ import {
   listDocuments,
   uploadDocumentFile,
 } from "@/modules/knowledge/documents-service";
-import { knowledgeApiError } from "../_lib/handle-error";
+import { apiError } from "@/app/api/_lib/handle-error";
 
 export async function GET(request: NextRequest) {
   const collectionId = request.nextUrl.searchParams.get("collectionId") ?? undefined;
@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
     const documents = await listDocuments({ collectionId });
     return NextResponse.json({ documents });
   } catch (error) {
-    return knowledgeApiError(error);
+    return apiError(error);
   }
 }
 
@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
     const document = await createTextDocument(parsed.data);
     return NextResponse.json({ document }, { status: 201 });
   } catch (error) {
-    return knowledgeApiError(error);
+    return apiError(error);
   }
 }
 
@@ -96,6 +96,6 @@ async function handleFileUpload(request: NextRequest): Promise<NextResponse> {
     });
     return NextResponse.json({ document }, { status: 201 });
   } catch (error) {
-    return knowledgeApiError(error);
+    return apiError(error);
   }
 }

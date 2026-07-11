@@ -35,7 +35,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "conversations.view",
     "knowledge.view",
     "knowledge.search",
-    "ai_behavior.view",
+    "ai.view",
     "widget.view",
   ],
 };

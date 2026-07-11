@@ -8,7 +8,7 @@ import {
   softDeleteDocument,
   updateDocument,
 } from "@/modules/knowledge/documents-service";
-import { knowledgeApiError } from "../../_lib/handle-error";
+import { apiError } from "@/app/api/_lib/handle-error";
 
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ documentId: string }> }) {
   const { documentId } = await params;
@@ -24,7 +24,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     const searchStats = await getDocumentSearchStats(documentId);
     return NextResponse.json({ document, searchStats });
   } catch (error) {
-    return knowledgeApiError(error);
+    return apiError(error);
   }
 }
 
@@ -64,7 +64,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     }
     return NextResponse.json({ document });
   } catch (error) {
-    return knowledgeApiError(error);
+    return apiError(error);
   }
 }
 
@@ -78,6 +78,6 @@ export async function DELETE(_request: NextRequest, { params }: { params: Promis
     await softDeleteDocument(documentId);
     return new NextResponse(null, { status: 204 });
   } catch (error) {
-    return knowledgeApiError(error);
+    return apiError(error);
   }
 }

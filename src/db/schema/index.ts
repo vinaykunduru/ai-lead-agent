@@ -7,3 +7,8 @@ export * from "./knowledge-collections";
 export * from "./knowledge-documents";
 export * from "./knowledge-chunks";
 export * from "./knowledge-search-logs";
+export * from "./ai-profiles";
+export * from "./ai-business-rules";
+export * from "./ai-lead-questions";
+export * from "./ai-business-hours";
+export * from "./ai-handoff-settings";

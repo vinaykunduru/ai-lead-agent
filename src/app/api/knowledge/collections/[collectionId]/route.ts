@@ -6,7 +6,7 @@ import {
   restoreCollection,
   softDeleteCollection,
 } from "@/modules/knowledge/collections-service";
-import { knowledgeApiError } from "../../_lib/handle-error";
+import { apiError } from "@/app/api/_lib/handle-error";
 
 const patchSchema = z.object({
   name: z.string().trim().min(1).max(120).optional(),
@@ -41,7 +41,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     }
     return NextResponse.json({ collection });
   } catch (error) {
-    return knowledgeApiError(error);
+    return apiError(error);
   }
 }
 
@@ -55,6 +55,6 @@ export async function DELETE(_request: NextRequest, { params }: { params: Promis
     await softDeleteCollection(collectionId);
     return new NextResponse(null, { status: 204 });
   } catch (error) {
-    return knowledgeApiError(error);
+    return apiError(error);
   }
 }
