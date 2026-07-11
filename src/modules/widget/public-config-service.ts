@@ -1,7 +1,8 @@
 import "server-only";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { db } from "@/db/client";
-import { widgetDomains, widgetKeys, widgetSettings, widgetThemes, widgets } from "@/db/schema";
+import { widgetSettings, widgetThemes } from "@/db/schema";
+import { resolveWidgetForPublicRequest } from "./resolve-public-request";
 
 /**
  * Public-safe shape only — see CLAUDE.md §4: never organization id, widget
@@ -38,66 +39,22 @@ export type PublicWidgetConfig = {
 };
 
 /**
- * Generic, indistinguishable failure for every rejection reason (unknown
- * key, wrong format, revoked key, disabled/draft/archived widget,
- * disallowed origin) — CLAUDE.md §4: "never leak whether a key format is
- * 'close' to valid, and never leak which organization a key would have
- * resolved to." Callers must not pattern-match on this message to
- * distinguish cases; the whole point is that they can't.
- */
-const INVALID_WIDGET_ERROR = "Invalid widget configuration request";
-
-/**
  * Resolves `publicKey → widget_keys → widgets → organization` and returns
- * only public-safe fields. Uses the service-role client because no visitor
- * session exists — one of the four documented CLAUDE.md §3.6 exceptions —
- * and manually re-scopes every query to the resolved widget/org itself,
- * since RLS provides no protection on this path.
+ * only public-safe fields. Widget/key/domain resolution itself lives in
+ * resolve-public-request.ts, shared with
+ * modules/conversation/execution-pipeline.ts — this function's only job is
+ * shaping that internal Widget row (plus its theme/settings) into the
+ * public-safe DTO below.
  *
  * `originHostname` is the caller's already-extracted, lowercased Origin/
- * Referer hostname (or null if neither header was present). Domain
- * enforcement is opt-in: a widget with zero configured domains is not yet
- * restricted (every competitor widget platform behaves this way — a freshly
- * created widget must be embeddable before its owner has had a chance to
- * add an allowlist entry). The moment at least one domain is added for a
- * widget, only matching, enabled domains are accepted — see
- * modules/widget/public-config-service.test.ts for both cases.
+ * Referer hostname (or null if neither header was present) — see
+ * extractOriginHost in resolve-public-request.ts.
  */
 export async function resolvePublicWidgetConfig(
   publicKey: string,
   originHostname: string | null,
 ): Promise<PublicWidgetConfig> {
-  const [keyRow] = await db
-    .select({ widgetId: widgetKeys.widgetId })
-    .from(widgetKeys)
-    .where(and(eq(widgetKeys.publicKey, publicKey), eq(widgetKeys.status, "active")))
-    .limit(1);
-  if (!keyRow) {
-    throw new Error(INVALID_WIDGET_ERROR);
-  }
-
-  const [widget] = await db
-    .select()
-    .from(widgets)
-    .where(and(eq(widgets.id, keyRow.widgetId), eq(widgets.status, "active")))
-    .limit(1);
-  if (!widget) {
-    throw new Error(INVALID_WIDGET_ERROR);
-  }
-
-  const allowedDomains = await db
-    .select({ domain: widgetDomains.domain, isEnabled: widgetDomains.isEnabled })
-    .from(widgetDomains)
-    .where(eq(widgetDomains.widgetId, widget.id));
-
-  if (allowedDomains.length > 0) {
-    const isAllowed =
-      originHostname !== null &&
-      allowedDomains.some((d) => d.isEnabled && d.domain === originHostname);
-    if (!isAllowed) {
-      throw new Error(INVALID_WIDGET_ERROR);
-    }
-  }
+  const widget = await resolveWidgetForPublicRequest(publicKey, originHostname);
 
   const [theme] = await db.select().from(widgetThemes).where(eq(widgetThemes.widgetId, widget.id)).limit(1);
   const [settings] = await db

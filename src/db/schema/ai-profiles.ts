@@ -16,6 +16,14 @@ export const aiResponseDetailEnum = pgEnum("ai_response_detail", ["concise", "ba
 
 export const aiEmojiUsageEnum = pgEnum("ai_emoji_usage", ["none", "minimal", "frequent"]);
 
+// Same 4 values as modules/ai-behaviour/rendering's PromptRendererId — the
+// Conversation Engine (Phase 5) renders a company's structured prompt with
+// whichever renderer matches this field, then calls the matching
+// providers/ai implementation. Kept as a real Postgres enum (not text)
+// because this is live configuration, not a historical record — see
+// db/schema/conversation-messages.ts's `provider` column for the contrast.
+export const aiProviderEnum = pgEnum("ai_provider", ["openai", "claude", "gemini", "llama"]);
+
 /**
  * One row per organization — the AI Brain's configuration (Identity,
  * Personality, Response Settings, Language, and the Safety fallback
@@ -69,6 +77,10 @@ export const aiProfiles = pgTable("ai_profiles", {
   // platform-level guardrail (see module doc comment above). Null falls
   // back to DEFAULT_SAFETY_FALLBACK_MESSAGE at the service layer.
   safetyFallbackMessage: text("safety_fallback_message"),
+
+  // Which providers/ai implementation the Conversation Engine renders and
+  // executes this profile's structured prompt with.
+  aiProvider: aiProviderEnum("ai_provider").notNull().default("claude"),
 
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

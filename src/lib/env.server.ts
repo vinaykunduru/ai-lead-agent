@@ -16,6 +16,17 @@ const schema = z.object({
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required (Supabase Postgres connection string)"),
   ANTHROPIC_API_KEY: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
   VOYAGE_API_KEY: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
+  // providers/ai — one var pair per Conversation Engine LLM provider.
+  OPENAI_API_KEY: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
+  OPENAI_MODEL: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
+  GEMINI_API_KEY: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
+  GEMINI_MODEL: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
+  // "Llama" means any OpenAI-compatible chat completions host (Groq,
+  // Together, a self-hosted vLLM/Ollama instance, ...), not a single fixed
+  // vendor — see providers/ai/llama.ts.
+  LLAMA_API_KEY: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
+  LLAMA_API_BASE_URL: z.preprocess(emptyToUndefined, z.string().url().optional()),
+  LLAMA_MODEL: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
   INNGEST_EVENT_KEY: z.preprocess(emptyToUndefined, z.string().optional()),
   INNGEST_SIGNING_KEY: z.preprocess(emptyToUndefined, z.string().optional()),
   SENTRY_AUTH_TOKEN: z.preprocess(emptyToUndefined, z.string().optional()),

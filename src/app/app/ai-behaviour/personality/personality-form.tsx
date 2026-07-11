@@ -18,6 +18,7 @@ import {
   updateAiProfileSchema,
   type UpdateAiProfileInput,
 } from "@/modules/ai-behaviour/validation";
+import { PROMPT_RENDERER_IDS, type PromptRendererId } from "@/modules/ai-behaviour/rendering";
 import type { AiProfile } from "@/db/schema";
 
 const FIELDS = [
@@ -33,7 +34,15 @@ const FIELDS = [
   "askFollowUpQuestions",
   "oneQuestionAtATime",
   "alwaysConcise",
+  "aiProvider",
 ] as const;
+
+const PROVIDER_LABELS: Record<PromptRendererId, string> = {
+  claude: "Claude",
+  openai: "OpenAI",
+  gemini: "Gemini",
+  llama: "Llama",
+};
 
 type FormValues = Pick<UpdateAiProfileInput, (typeof FIELDS)[number]>;
 
@@ -71,6 +80,7 @@ export function PersonalityForm({ profile, canUpdate }: { profile: AiProfile; ca
       askFollowUpQuestions: profile.askFollowUpQuestions,
       oneQuestionAtATime: profile.oneQuestionAtATime,
       alwaysConcise: profile.alwaysConcise,
+      aiProvider: profile.aiProvider,
     },
   });
 
@@ -120,6 +130,31 @@ export function PersonalityForm({ profile, canUpdate }: { profile: AiProfile; ca
                   </Select>
                 )}
               />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="aiProvider">AI provider</Label>
+              <Controller
+                control={control}
+                name="aiProvider"
+                render={({ field }) => (
+                  <Select value={field.value} onValueChange={(v) => field.onChange(v ?? field.value)} disabled={!canUpdate}>
+                    <SelectTrigger id="aiProvider" className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {PROMPT_RENDERER_IDS.map((id) => (
+                        <SelectItem key={id} value={id}>
+                          {PROVIDER_LABELS[id]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              />
+              <p className="text-xs text-muted-foreground">
+                Which AI provider the Conversation Engine uses to generate replies for this widget.
+              </p>
             </div>
 
             {personalityType === "custom" ? (

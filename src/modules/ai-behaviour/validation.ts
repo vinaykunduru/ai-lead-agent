@@ -39,6 +39,10 @@ export const updateAiProfileSchema = z.object({
   oneQuestionAtATime: z.boolean().optional(),
   alwaysConcise: z.boolean().optional(),
 
+  // Which providers/ai implementation (and matching rendering/*.ts renderer)
+  // the Conversation Engine uses for this org.
+  aiProvider: z.enum(PROMPT_RENDERER_IDS).optional(),
+
   primaryLanguage: z.string().trim().min(2).max(10).optional(),
   supportedLanguages: z.array(z.string().trim().min(2).max(10)).min(1).max(20).optional(),
   autoDetectLanguage: z.boolean().optional(),

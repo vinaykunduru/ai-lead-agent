@@ -1,0 +1,34 @@
+import { pgEnum, pgTable, timestamp, uuid } from "drizzle-orm/pg-core";
+import { conversationSessions } from "./conversation-sessions";
+import { organizations } from "./organizations";
+import { widgets } from "./widgets";
+
+export const conversationStatusEnum = pgEnum("conversation_status", ["active", "ended"]);
+
+/**
+ * One message thread within a visitor session (see conversation-sessions.ts
+ * for why these are separate tables). `widgetId`/`organizationId` are
+ * denormalized from the session for query convenience and RLS — a
+ * conversation never outlives or moves between sessions.
+ */
+export const conversations = pgTable("conversations", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  widgetId: uuid("widget_id")
+    .notNull()
+    .references(() => widgets.id, { onDelete: "cascade" }),
+  sessionId: uuid("session_id")
+    .notNull()
+    .references(() => conversationSessions.id, { onDelete: "cascade" }),
+  status: conversationStatusEnum("status").notNull().default("active"),
+  startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+  endedAt: timestamp("ended_at", { withTimezone: true }),
+  lastActivityAt: timestamp("last_activity_at", { withTimezone: true }).notNull().defaultNow(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type Conversation = typeof conversations.$inferSelect;
+export type NewConversation = typeof conversations.$inferInsert;

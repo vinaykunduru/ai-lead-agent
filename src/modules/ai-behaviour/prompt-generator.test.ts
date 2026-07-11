@@ -33,6 +33,7 @@ function makeProfile(overrides: Partial<AiProfile> = {}): AiProfile {
     autoDetectLanguage: true,
     fallbackLanguage: "en",
     safetyFallbackMessage: null,
+    aiProvider: "claude",
     createdAt: now,
     updatedAt: now,
     ...overrides,

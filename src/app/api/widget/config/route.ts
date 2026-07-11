@@ -1,17 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { publicWidgetConfigQuerySchema } from "@/modules/widget/validation";
 import { resolvePublicWidgetConfig } from "@/modules/widget/public-config-service";
+import { extractOriginHost } from "@/modules/widget/resolve-public-request";
 import { isRateLimited } from "@/modules/widget/rate-limit";
-
-function extractOriginHost(request: NextRequest): string | null {
-  const originHeader = request.headers.get("origin") ?? request.headers.get("referer");
-  if (!originHeader) return null;
-  try {
-    return new URL(originHeader).host.toLowerCase();
-  } catch {
-    return null;
-  }
-}
 
 /**
  * Public, unauthenticated — the embed SDK on a third-party site calls this
@@ -32,7 +23,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Invalid widget configuration request" }, { status: 400 });
   }
 
-  const originHost = extractOriginHost(request);
+  const originHost = extractOriginHost(request.headers);
 
   try {
     const config = await resolvePublicWidgetConfig(parsed.data.key, originHost);

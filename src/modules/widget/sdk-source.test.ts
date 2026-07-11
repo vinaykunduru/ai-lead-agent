@@ -7,6 +7,17 @@ describe("WIDGET_SDK_SOURCE", () => {
     expect(WIDGET_SDK_SOURCE).toContain("/api/widget/config?key=");
   });
 
+  it("sends messages to the conversation engine's public endpoint and reads the response as a stream", () => {
+    expect(WIDGET_SDK_SOURCE).toContain("/api/widget/messages");
+    expect(WIDGET_SDK_SOURCE).toContain("response.body");
+    expect(WIDGET_SDK_SOURCE).toContain("getReader");
+  });
+
+  it("persists a stable, client-generated visitor id rather than a server-issued credential", () => {
+    expect(WIDGET_SDK_SOURCE).toContain("localStorage");
+    expect(WIDGET_SDK_SOURCE).toContain("visitorId");
+  });
+
   it("never references a service key, secret, or database credential", () => {
     const forbidden = ["SUPABASE_SERVICE_ROLE", "DATABASE_URL", "service_role", "secret", "organizationId"];
     for (const term of forbidden) {
@@ -14,10 +25,15 @@ describe("WIDGET_SDK_SOURCE", () => {
     }
   });
 
-  it("does not call any AI provider or streaming API", () => {
-    for (const term of ["openai", "anthropic", "chat/completions", "text/event-stream", "EventSource"]) {
+  it("never talks to a vendor AI API directly — only this app's own backend", () => {
+    for (const term of ["api.openai.com", "api.anthropic.com", "generativelanguage.googleapis.com"]) {
       expect(WIDGET_SDK_SOURCE.toLowerCase()).not.toContain(term.toLowerCase());
     }
+  });
+
+  it("never opens a WebSocket (module spec: SSE only)", () => {
+    expect(WIDGET_SDK_SOURCE).not.toContain("WebSocket");
+    expect(WIDGET_SDK_SOURCE).not.toContain("new EventSource");
   });
 
   it("is a self-invoking function (safe to drop into any page via a script tag)", () => {

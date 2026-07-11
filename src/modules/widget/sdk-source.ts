@@ -4,16 +4,26 @@
  * asset so it stays a single, auditable, framework-independent file — see
  * module spec §15: "framework-independent, usable on any website."
  *
- * Scope boundary (module spec): loads the widget, fetches public config,
- * renders a shell, applies the theme, and exposes an extension point for a
- * future chat engine. It never calls an AI provider, never sends/receives
- * a conversation message, and never streams anything — those belong to a
- * later phase.
+ * As of the Conversation Engine milestone: loads the widget, fetches
+ * public config, renders a shell, applies the theme, and now sends real
+ * messages to POST /api/widget/messages and streams the reply back
+ * (module spec §12: "Only replace the mocked transport with the real
+ * conversation client" — theme/appearance/configuration/installation are
+ * all untouched from the Widget Platform milestone). It never calls an AI
+ * provider directly, never stores anything beyond a local visitor id, and
+ * never opens a WebSocket — SSE-framed text over a POST fetch only.
  *
- * Origin validation happens server-side (GET /api/widget/config checks the
- * browser's own `Origin` header against the widget's allowed domains) —
- * the browser attaches that header to the fetch below automatically; the
- * SDK itself does not and cannot forge it.
+ * A native `EventSource` can't be used here because it only supports GET
+ * requests; this reads `response.body` as a stream and parses the same
+ * `data: {...}\n\n` framing manually (see readSseStream below) — the wire
+ * format is still genuine SSE, only the delivery API differs from the
+ * browser's built-in assumptions.
+ *
+ * Origin validation happens server-side on every request (both
+ * /api/widget/config and /api/widget/messages check the browser's own
+ * `Origin` header against the widget's allowed domains) — the browser
+ * attaches that header automatically; the SDK itself does not and cannot
+ * forge it.
  */
 export const WIDGET_SDK_SOURCE = `(function () {
   "use strict";
@@ -30,6 +40,40 @@ export const WIDGET_SDK_SOURCE = `(function () {
   var scriptUrl = new URL(currentScript.src, window.location.href);
   var apiBase = scriptUrl.origin;
 
+  var state = { conversationId: null, sending: false };
+  var fallbackVisitorId = null;
+
+  function fallbackUuid() {
+    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function (c) {
+      var r = (Math.random() * 16) | 0;
+      var v = c === "x" ? r : (r & 0x3) | 0x8;
+      return v.toString(16);
+    });
+  }
+
+  function generateId() {
+    return window.crypto && window.crypto.randomUUID ? window.crypto.randomUUID() : fallbackUuid();
+  }
+
+  // A stable, non-PII correlation token, persisted so a returning visitor
+  // is recognized as the same conversation_sessions row server-side — see
+  // db/schema/conversation-sessions.ts. Never a real account identifier.
+  function getVisitorId() {
+    var storageKey = "ai_widget_visitor_id";
+    try {
+      var stored = window.localStorage.getItem(storageKey);
+      if (stored) return stored;
+      var generated = generateId();
+      window.localStorage.setItem(storageKey, generated);
+      return generated;
+    } catch (e) {
+      // Storage unavailable (privacy mode, etc.) — fall back to an
+      // in-memory id that only lasts this page load.
+      if (!fallbackVisitorId) fallbackVisitorId = generateId();
+      return fallbackVisitorId;
+    }
+  }
+
   function applyTheme(host, appearance) {
     host.style.setProperty("--ai-widget-primary", appearance.primaryColor);
     host.style.setProperty("--ai-widget-accent", appearance.accentColor);
@@ -45,6 +89,115 @@ export const WIDGET_SDK_SOURCE = `(function () {
     host.style[vertical] = "20px";
     host.style[horizontal] = "20px";
     host.style.zIndex = "2147483000";
+  }
+
+  function appendBubble(container, role, config) {
+    var bubble = document.createElement("div");
+    bubble.className = "ai-widget-bubble ai-widget-bubble-" + role;
+
+    var textEl = document.createElement("span");
+    textEl.className = "ai-widget-bubble-text";
+    bubble.appendChild(textEl);
+
+    if (config.behaviour.showTimestamp) {
+      var time = document.createElement("span");
+      time.className = "ai-widget-bubble-time";
+      time.textContent = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      bubble.appendChild(time);
+    }
+
+    container.appendChild(bubble);
+    container.scrollTop = container.scrollHeight;
+    return { root: bubble, textEl: textEl };
+  }
+
+  // Reads a fetch Response body as SSE framing and calls onEvent for each
+  // parsed \`data:\` payload — the client-side mirror of
+  // providers/ai/sse-parser.ts and modules/conversation/transport/sse.ts's
+  // wire format.
+  function readSseStream(body, onEvent) {
+    var reader = body.getReader();
+    var decoder = new TextDecoder();
+    var buffer = "";
+
+    function pump() {
+      return reader.read().then(function (result) {
+        if (result.done) return;
+        buffer += decoder.decode(result.value, { stream: true });
+        var lines = buffer.split("\\n");
+        buffer = lines.pop();
+        for (var i = 0; i < lines.length; i++) {
+          var line = lines[i];
+          if (line.indexOf("data:") === 0) {
+            var payload = line.slice(5).trim();
+            if (payload) {
+              try {
+                onEvent(JSON.parse(payload));
+              } catch (e) {
+                // Malformed event — skip it rather than breaking the stream.
+              }
+            }
+          }
+        }
+        return pump();
+      });
+    }
+
+    return pump();
+  }
+
+  function sendMessage(text, elements, config) {
+    var trimmed = (text || "").trim();
+    if (!trimmed || state.sending) return;
+    state.sending = true;
+    elements.input.value = "";
+    elements.sendButton.disabled = true;
+
+    appendBubble(elements.messages, "user", config).textEl.textContent = trimmed;
+    var assistant = appendBubble(elements.messages, "assistant", config);
+    if (config.behaviour.showTypingIndicator) {
+      assistant.root.classList.add("ai-widget-typing");
+    }
+
+    fetch(apiBase + "/api/widget/messages", {
+      method: "POST",
+      credentials: "omit",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        key: publicKey,
+        visitorId: getVisitorId(),
+        conversationId: state.conversationId || undefined,
+        message: trimmed,
+      }),
+    })
+      .then(function (response) {
+        if (!response.ok || !response.body) throw new Error("message request failed");
+        return readSseStream(response.body, function (event) {
+          if (event.type === "ready") {
+            state.conversationId = event.conversationId;
+          } else if (event.type === "token") {
+            assistant.root.classList.remove("ai-widget-typing");
+            assistant.textEl.textContent += event.text;
+            elements.messages.scrollTop = elements.messages.scrollHeight;
+          } else if (event.type === "error") {
+            assistant.root.classList.remove("ai-widget-typing");
+            assistant.root.classList.add("ai-widget-error");
+            assistant.textEl.textContent = event.message;
+          }
+          // "citations"/"done": no UI action yet — the widget doesn't
+          // render citations in this phase (module spec §7).
+        });
+      })
+      .catch(function () {
+        assistant.root.classList.remove("ai-widget-typing");
+        assistant.root.classList.add("ai-widget-error");
+        assistant.textEl.textContent =
+          config.behaviour.offlineMessage || "Something went wrong. Please try again.";
+      })
+      .then(function () {
+        state.sending = false;
+        elements.sendButton.disabled = false;
+      });
   }
 
   function renderShell(container, config) {
@@ -76,6 +229,25 @@ export const WIDGET_SDK_SOURCE = `(function () {
       "  border: 1px solid var(--ai-widget-accent); color: var(--ai-widget-accent);",
       "  background: none; border-radius: 999px; padding: 6px 12px; font-size: 12px; cursor: pointer;",
       "}",
+      ".ai-widget-messages { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }",
+      ".ai-widget-bubble {",
+      "  max-width: 85%; padding: 8px 12px; border-radius: 12px; font-size: 13px;",
+      "  display: flex; flex-direction: column; gap: 2px; white-space: pre-wrap; word-break: break-word;",
+      "}",
+      ".ai-widget-bubble-user { align-self: flex-end; background: var(--ai-widget-primary); color: #fff; }",
+      ".ai-widget-bubble-assistant { align-self: flex-start; background: #f1f1f3; color: #111; }",
+      ".ai-widget-bubble-error { background: #fdecea; color: #b3261e; }",
+      ".ai-widget-bubble-time { font-size: 10px; opacity: 0.7; align-self: flex-end; }",
+      ".ai-widget-typing .ai-widget-bubble-text::after { content: '...'; }",
+      ".ai-widget-input-row { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid #eee; }",
+      ".ai-widget-input {",
+      "  flex: 1; border: 1px solid #ddd; border-radius: 999px; padding: 8px 12px; font-size: 13px; outline: none;",
+      "}",
+      ".ai-widget-send {",
+      "  border: none; border-radius: 999px; padding: 8px 16px; font-size: 13px; cursor: pointer;",
+      "  background: var(--ai-widget-primary); color: #fff;",
+      "}",
+      ".ai-widget-send:disabled { opacity: 0.6; cursor: default; }",
       ".ai-widget-footer { padding: 8px 16px; font-size: 11px; color: #888; text-align: center; }",
     ].join("\\n");
 
@@ -97,6 +269,10 @@ export const WIDGET_SDK_SOURCE = `(function () {
     welcome.textContent = config.behaviour.welcomeMessage || "Hi! How can we help?";
     body.appendChild(welcome);
 
+    var messages = document.createElement("div");
+    messages.className = "ai-widget-messages";
+    var elements = { messages: messages };
+
     if (config.behaviour.suggestedQuestions && config.behaviour.suggestedQuestions.length) {
       var suggested = document.createElement("div");
       suggested.className = "ai-widget-suggested";
@@ -104,19 +280,42 @@ export const WIDGET_SDK_SOURCE = `(function () {
         var button = document.createElement("button");
         button.type = "button";
         button.textContent = question;
-        // Extension point only — Phase 4 does not implement chat. A future
-        // conversation-engine phase wires this click (and the panel body
-        // generally) up to a real message-sending flow.
         button.addEventListener("click", function () {
-          if (window.__aiWidgetOnSuggestedQuestion) {
-            window.__aiWidgetOnSuggestedQuestion(question);
-          }
+          sendMessage(question, elements, config);
         });
         suggested.appendChild(button);
       });
       body.appendChild(suggested);
     }
+    body.appendChild(messages);
     panel.appendChild(body);
+
+    var inputRow = document.createElement("div");
+    inputRow.className = "ai-widget-input-row";
+    var input = document.createElement("input");
+    input.type = "text";
+    input.className = "ai-widget-input";
+    input.placeholder = "Type a message...";
+    var sendButton = document.createElement("button");
+    sendButton.type = "button";
+    sendButton.className = "ai-widget-send";
+    sendButton.textContent = "Send";
+    inputRow.appendChild(input);
+    inputRow.appendChild(sendButton);
+    panel.appendChild(inputRow);
+
+    elements.input = input;
+    elements.sendButton = sendButton;
+
+    sendButton.addEventListener("click", function () {
+      sendMessage(input.value, elements, config);
+    });
+    input.addEventListener("keydown", function (event) {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        sendMessage(input.value, elements, config);
+      }
+    });
 
     if (config.behaviour.showPoweredBy) {
       var footer = document.createElement("div");
@@ -157,8 +356,8 @@ export const WIDGET_SDK_SOURCE = `(function () {
     applyTheme(container, config.appearance);
     renderShell(container, config);
 
-    // Public, read-only handle for a future chat-engine phase to build on
-    // — never expands to include AI calls in this phase.
+    // Public, read-only handle — never expands to expose anything beyond
+    // the same public config the SDK itself already fetched.
     window.AIWidget = window.AIWidget || {};
     window.AIWidget.config = config;
   }
