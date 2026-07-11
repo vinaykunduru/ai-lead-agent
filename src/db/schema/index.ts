@@ -12,3 +12,8 @@ export * from "./ai-business-rules";
 export * from "./ai-lead-questions";
 export * from "./ai-business-hours";
 export * from "./ai-handoff-settings";
+export * from "./widgets";
+export * from "./widget-keys";
+export * from "./widget-domains";
+export * from "./widget-themes";
+export * from "./widget-settings";

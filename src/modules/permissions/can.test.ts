@@ -25,7 +25,8 @@ describe("permissions", () => {
         p.endsWith(".create") ||
         p.endsWith(".update") ||
         p.endsWith(".delete") ||
-        p.endsWith(".reprocess"),
+        p.endsWith(".reprocess") ||
+        p.endsWith(".publish"),
     );
     for (const permission of writePermissions) {
       expect(hasPermission("viewer", permission)).toBe(false);
@@ -45,7 +46,7 @@ describe("permissions", () => {
     expect(hasPermission("agent", "leads.view")).toBe(true);
     expect(hasPermission("agent", "conversations.view")).toBe(true);
     expect(hasPermission("agent", "knowledge.view")).toBe(false);
-    expect(hasPermission("agent", "widget.manage")).toBe(false);
+    expect(hasPermission("agent", "widget.update")).toBe(false);
     expect(hasPermission("agent", "users.manage")).toBe(false);
   });
 
@@ -55,7 +56,7 @@ describe("permissions", () => {
     expect(hasPermission("manager", "knowledge.view")).toBe(false);
     expect(hasPermission("manager", "knowledge.create")).toBe(false);
     expect(hasPermission("manager", "ai.update")).toBe(false);
-    expect(hasPermission("manager", "widget.manage")).toBe(false);
+    expect(hasPermission("manager", "widget.update")).toBe(false);
     expect(hasPermission("manager", "users.manage")).toBe(false);
   });
 
@@ -68,6 +69,16 @@ describe("permissions", () => {
     expect(hasPermission("viewer", "ai.test")).toBe(false);
     expect(hasPermission("manager", "ai.test")).toBe(false);
     expect(hasPermission("agent", "ai.view")).toBe(false);
+  });
+
+  it("only owner and admin can create, update, delete, or publish widgets", () => {
+    for (const permission of ["widget.create", "widget.update", "widget.delete", "widget.publish"] as const) {
+      expect(hasPermission("owner", permission)).toBe(true);
+      expect(hasPermission("admin", permission)).toBe(true);
+      expect(hasPermission("viewer", permission)).toBe(false);
+      expect(hasPermission("manager", permission)).toBe(false);
+      expect(hasPermission("agent", permission)).toBe(false);
+    }
   });
 
   it("can() defers entirely to the role map, no other logic", () => {

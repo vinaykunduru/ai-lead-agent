@@ -16,7 +16,10 @@ export const PERMISSIONS = [
   "ai.update",
   "ai.test",
   "widget.view",
-  "widget.manage",
+  "widget.create",
+  "widget.update",
+  "widget.delete",
+  "widget.publish",
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];

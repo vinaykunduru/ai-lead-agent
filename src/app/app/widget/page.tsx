@@ -1,15 +1,25 @@
 import { PageHeader } from "@/shared/components/page-header";
-import { EmptyState } from "@/shared/components/empty-state";
+import { requireCompanySession } from "@/lib/auth/session";
+import { can } from "@/modules/permissions";
+import { listWidgets } from "@/modules/widget/widgets-service";
+import { WidgetsTable } from "./widgets-table";
 
-export default function WidgetSettingsPage() {
+export default async function WidgetListPage() {
+  const session = await requireCompanySession();
+  const widgets = await listWidgets();
+
+  const permissions = {
+    canCreate: can(session, "widget.create"),
+    canUpdate: can(session, "widget.update"),
+    canDelete: can(session, "widget.delete"),
+    canPublish: can(session, "widget.publish"),
+  };
+
   return (
     <div>
-      <PageHeader title="Widget" description="Customize and embed your website AI widget." />
+      <PageHeader title="Widget" description="Create and embed AI widgets on your website." />
       <div className="p-6">
-        <EmptyState
-          title="Widget settings aren't available yet"
-          description="This module will be built in a later phase."
-        />
+        <WidgetsTable widgets={widgets} {...permissions} />
       </div>
     </div>
   );
