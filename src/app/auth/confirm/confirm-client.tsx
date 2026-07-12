@@ -3,13 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
-
-function sanitizeNextPath(value: string | undefined): string {
-  if (!value || !value.startsWith("/") || value.startsWith("//")) {
-    return "/";
-  }
-  return value;
-}
+import { sanitizeNextPath } from "@/shared/lib/redirect";
 
 type EmailOtpType = "signup" | "invite" | "magiclink" | "recovery" | "email_change" | "email";
 const EMAIL_OTP_TYPES: readonly string[] = [

@@ -1,13 +1,5 @@
 import { LoginForm } from "./login-form";
-
-function sanitizeNextPath(value: string | undefined): string {
-  // Only allow same-origin relative paths. Reject protocol-relative ("//evil.com")
-  // and absolute URLs to prevent an open-redirect via the `next` query param.
-  if (!value || !value.startsWith("/") || value.startsWith("//")) {
-    return "/";
-  }
-  return value;
-}
+import { sanitizeNextPath } from "@/shared/lib/redirect";
 
 // Fixed, curated copy keyed by a known code — never echo raw query-string
 // content back to the user (avoids reflected-content and internal-error
