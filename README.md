@@ -5,6 +5,80 @@ Dashboard, and the embedded website widget scaffold. See [CLAUDE.md](./CLAUDE.md
 for the permanent architecture and security rules, and read it before making
 changes.
 
+# AI Lead Agent
+
+An enterprise-grade, multi-tenant AI Lead Engagement Platform that helps businesses capture, qualify, and convert website visitors using AI.
+
+Built with a security-first architecture, the platform allows each company to manage its own knowledge base, AI behaviour, conversations, leads, and customer interactions while maintaining complete tenant isolation through PostgreSQL Row-Level Security (RLS).
+
+> **Project Status:** 🚧 Active Development
+
+---
+
+## Current Milestone
+
+### ✅ Completed
+
+- Multi-tenant SaaS Foundation
+- Platform Administration
+- Company Management
+- Authentication & Authorization
+- PostgreSQL Row-Level Security (RLS)
+- Audit Logging
+- Knowledge Base
+- Semantic Search
+- Background Processing
+- Provider Abstraction
+- Comprehensive Test Suite
+
+### 🚧 In Progress
+
+- AI Behaviour
+
+### 📋 Planned
+
+- Website Widget
+- Conversations
+- Lead Management
+- WhatsApp Integration
+- AI Voice Agent
+- Analytics & Reporting
+
+---
+
+## Architecture
+
+```text
+Platform Admin
+        │
+        ▼
+Company Workspace
+        │
+        ├── Knowledge Base ✅
+        ├── AI Behaviour 🚧
+        ├── Website Widget
+        ├── Conversations
+        ├── Leads
+        ├── Team
+        └── Settings
+```
+
+---
+
+## Key Features
+
+- Multi-tenant SaaS architecture
+- PostgreSQL Row-Level Security (RLS)
+- Secure role-based permissions
+- Knowledge Base with semantic search
+- pgvector-powered embeddings
+- Background document processing
+- Audit logging
+- Provider abstraction
+- Production-ready testing
+
+---
+
 ## Stack
 
 Next.js 16 (App Router, Turbopack) · TypeScript strict · Tailwind CSS ·
@@ -168,3 +242,23 @@ suspended..." rather than any company data, even briefly.
 
 `zod` is pinned to `~4.0.17` — see the note in CLAUDE.md §9 before bumping it
 or `@hookform/resolvers`.
+
+## Roadmap
+
+| Version | Milestone | Status |
+|----------|-----------|--------|
+| v0.1 | Foundation | ✅ Complete |
+| v0.2 | Knowledge Base | ✅ Complete |
+| v0.3 | AI Behaviour | 🚧 In Progress |
+| v0.4 | Website Widget | Planned |
+| v0.5 | Conversations | Planned |
+| v0.6 | Leads | Planned |
+| v0.7 | WhatsApp Integration | Planned |
+| v0.8 | AI Voice Agent | Planned |
+| v1.0 | Production Release | Planned |
+
+---
+
+## License
+
+Private repository. All rights reserved.
