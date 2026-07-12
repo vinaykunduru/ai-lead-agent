@@ -61,10 +61,10 @@ export async function POST(request: NextRequest) {
  * A JSON POST is a "preflighted" cross-origin request (Content-Type:
  * application/json isn't a CORS-simple content type) — without this, the
  * browser never even sends the POST above; it just fails the OPTIONS
- * preflight and surfaces a generic "Failed to fetch" to the SDK, which is
- * exactly what a live deployment on a customer's own domain (e.g.
- * bloomdigital.co.in embedding a widget served from
- * agent.bloomdigital.co.in) hits on every message send.
+ * preflight and surfaces a generic "Failed to fetch" to the SDK. This is
+ * required for every real deployment, since the widget always runs on the
+ * customer's own domain (e.g. bloomdigital.co.in) rather than this API's
+ * domain (agent.bloomdigital.co.in).
  */
 export async function OPTIONS(request: NextRequest) {
   const originHeader = request.headers.get("origin");
