@@ -184,7 +184,6 @@ export const WIDGET_SDK_SOURCE = `(function () {
         return readSseStream(response.body, function (event) {
           if (event.type === "ready") {
             state.conversationId = event.conversationId;
-            startPolling(elements, config);
           } else if (event.type === "token") {
             assistant.root.classList.remove("ai-widget-typing");
             assistant.textEl.textContent += event.text;
@@ -211,6 +210,16 @@ export const WIDGET_SDK_SOURCE = `(function () {
           config.behaviour.offlineMessage || "Something went wrong. Please try again.";
       })
       .then(function () {
+        // Started only once the current turn's own stream has fully
+        // resolved (done/handoff/error), never while it's still in
+        // flight — polling exists to pick up a human agent's reply sent
+        // later via the Inbox, not to race the widget's own request.
+        // Starting it any earlier can catch the assistant's message
+        // between the moment execution-pipeline.ts marks it complete in
+        // the database and the moment the "done" SSE event (which records
+        // the id in state.seenMessageIds) actually reaches the browser,
+        // rendering the same reply a second time.
+        startPolling(elements, config);
         state.sending = false;
         elements.sendButton.disabled = false;
       });

@@ -28,6 +28,26 @@ describe("WIDGET_SDK_SOURCE", () => {
     expect(WIDGET_SDK_SOURCE).toContain("seenMessageIds");
   });
 
+  it("does not start polling until the current turn's own stream has finished", () => {
+    // Regression test: starting polling on "ready" (the moment the request
+    // begins) raced against execution-pipeline.ts marking the assistant
+    // message status='complete' in the database *before* the "done" SSE
+    // event (which records the id in seenMessageIds) reaches the browser —
+    // a poll landing in that window rendered the same reply a second time.
+    // Polling must start only after the stream resolves, so any message it
+    // finds afterward is one the widget didn't already render.
+    const readyBranch = WIDGET_SDK_SOURCE.match(/event\.type === "ready"\)\s*\{([\s\S]*?)\}\s*else/);
+    expect(readyBranch).not.toBeNull();
+    expect(readyBranch![1]).not.toContain("startPolling");
+
+    const readyIndex = WIDGET_SDK_SOURCE.indexOf('event.type === "ready"');
+    const doneIndex = WIDGET_SDK_SOURCE.indexOf('event.type === "done"');
+    const pollStartIndex = WIDGET_SDK_SOURCE.indexOf("startPolling(elements, config);");
+    expect(readyIndex).toBeGreaterThan(-1);
+    expect(doneIndex).toBeGreaterThan(readyIndex);
+    expect(pollStartIndex).toBeGreaterThan(doneIndex);
+  });
+
   it("handles the handoff event (Human Takeover) without treating it as an error", () => {
     expect(WIDGET_SDK_SOURCE).toContain('"handoff"');
   });
