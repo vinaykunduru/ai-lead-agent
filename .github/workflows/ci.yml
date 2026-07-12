@@ -2,14 +2,13 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
   pull_request:
 
 env:
-  # Placeholder values so `next build` can compile and statically analyze
-  # routes — they don't connect to anything real. Real Supabase credentials
-  # are only needed to actually run the app, and (for integration tests) are
-  # provided via repo secrets below.
+  # Placeholder values so `next build` can compile and statically analyze routes.
+  # Integration tests override these using GitHub Secrets.
   NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
   NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
   SUPABASE_SERVICE_ROLE_KEY: placeholder-service-role-key
@@ -19,17 +18,25 @@ env:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
 
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Activate pnpm
+        run: corepack prepare pnpm@10 --activate
+
+      - name: Verify pnpm
+        run: pnpm --version
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -40,18 +47,14 @@ jobs:
       - name: Lint
         run: pnpm lint
 
-      - name: Unit tests
+      - name: Run tests
         run: pnpm test
         env:
-          # Cross-tenant isolation integration tests only run when these repo
-          # secrets are configured against a real (ideally disposable/staging)
-          # Supabase project — see CLAUDE.md §7. Without them the suite skips
-          # those tests rather than failing.
           DATABASE_URL: ${{ secrets.TEST_DATABASE_URL || '' }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.TEST_SUPABASE_SERVICE_ROLE_KEY || '' }}
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.TEST_SUPABASE_URL || '' }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.TEST_SUPABASE_ANON_KEY || '' }}
           NEXT_PUBLIC_APP_URL: http://localhost:3000
 
-      - name: Build
+      - name: Production build
         run: pnpm build
