@@ -1,6 +1,4 @@
 import "server-only";
-import { JSDOM } from "jsdom";
-import { Readability } from "@mozilla/readability";
 
 const FETCH_TIMEOUT_MS = 15_000;
 const MAX_HTML_SIZE_BYTES = 5 * 1024 * 1024; // 5MB safety cap
@@ -78,6 +76,13 @@ export async function extractWebsiteText(rawUrl: string): Promise<WebsiteExtract
   } finally {
     clearTimeout(timeout);
   }
+
+  // Loaded lazily (not at module scope) so importing this file — e.g. via the
+  // /api/inngest route's module graph — never pulls in jsdom's ESM-only
+  // transitive dependency (html-encoding-sniffer -> @exodus/bytes) unless a
+  // website-import job actually runs. Dynamic import() also uses Node's ESM
+  // loader, which (unlike require()) can load that ESM-only dependency at all.
+  const [{ JSDOM }, { Readability }] = await Promise.all([import("jsdom"), import("@mozilla/readability")]);
 
   const dom = new JSDOM(html, { url: url.toString() });
   const article = new Readability(dom.window.document).parse();
