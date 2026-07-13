@@ -117,7 +117,103 @@ export const WIDGET_SDK_SOURCE = `(function () {
 
     container.appendChild(bubble);
     container.scrollTop = container.scrollHeight;
-    return { root: bubble, textEl: textEl };
+    return { root: bubble, textEl: textEl, raw: "" };
+  }
+
+  // Only http/https — blocks a javascript: URI or similar from ever
+  // reaching a real href, regardless of whether it came from the model,
+  // a malicious knowledge-base document, or a prompt-injection attempt.
+  function isSafeUrl(url) {
+    try {
+      var parsed = new URL(url, window.location.href);
+      return parsed.protocol === "http:" || parsed.protocol === "https:";
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function makeLink(text, url) {
+    var a = document.createElement("a");
+    a.href = url;
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
+    a.textContent = text;
+    return a;
+  }
+
+  // Parses a single line of inline markdown — [text](url), **bold**, and
+  // bare https:// URLs — into real DOM nodes. Never uses innerHTML on any
+  // text derived from the model or the knowledge base; every node is built
+  // via createElement/createTextNode/textContent, so there is no path for
+  // markup in a response to become live HTML.
+  function appendInline(el, text) {
+    var pattern = /\\[([^\\]]+)\\]\\(([^)]+)\\)|\\*\\*([^*]+)\\*\\*|(https?:\\/\\/[^\\s)]+)/g;
+    var lastIndex = 0;
+    var match;
+    while ((match = pattern.exec(text))) {
+      if (match.index > lastIndex) {
+        el.appendChild(document.createTextNode(text.slice(lastIndex, match.index)));
+      }
+      if (match[1] !== undefined) {
+        el.appendChild(isSafeUrl(match[2]) ? makeLink(match[1], match[2]) : document.createTextNode(match[0]));
+      } else if (match[3] !== undefined) {
+        var strong = document.createElement("strong");
+        strong.textContent = match[3];
+        el.appendChild(strong);
+      } else if (match[4] !== undefined) {
+        el.appendChild(isSafeUrl(match[4]) ? makeLink(match[4], match[4]) : document.createTextNode(match[4]));
+      }
+      lastIndex = pattern.lastIndex;
+    }
+    if (lastIndex < text.length) {
+      el.appendChild(document.createTextNode(text.slice(lastIndex)));
+    }
+  }
+
+  // Re-renders a bubble's full text as markdown (paragraphs, bullet/numbered
+  // lists, bold, links) on every call — simplest correct approach for a
+  // token stream, since list/paragraph structure can only be recognized
+  // once a full line has arrived, not from a single token fragment. Message
+  // bodies are short enough that rebuilding the subtree each token is cheap.
+  function renderAssistantText(textEl, fullText) {
+    while (textEl.firstChild) textEl.removeChild(textEl.firstChild);
+    var lines = fullText.split("\\n");
+    var i = 0;
+    while (i < lines.length) {
+      if (/^\\s*[-*]\\s+/.test(lines[i])) {
+        var ul = document.createElement("ul");
+        ul.className = "ai-widget-list";
+        while (i < lines.length && /^\\s*[-*]\\s+/.test(lines[i])) {
+          var li = document.createElement("li");
+          appendInline(li, lines[i].replace(/^\\s*[-*]\\s+/, ""));
+          ul.appendChild(li);
+          i++;
+        }
+        textEl.appendChild(ul);
+        continue;
+      }
+      if (/^\\s*\\d+\\.\\s+/.test(lines[i])) {
+        var ol = document.createElement("ol");
+        ol.className = "ai-widget-list";
+        while (i < lines.length && /^\\s*\\d+\\.\\s+/.test(lines[i])) {
+          var liNum = document.createElement("li");
+          appendInline(liNum, lines[i].replace(/^\\s*\\d+\\.\\s+/, ""));
+          ol.appendChild(liNum);
+          i++;
+        }
+        textEl.appendChild(ol);
+        continue;
+      }
+      if (lines[i].trim() === "") {
+        i++;
+        continue;
+      }
+      var p = document.createElement("p");
+      p.className = "ai-widget-paragraph";
+      appendInline(p, lines[i]);
+      textEl.appendChild(p);
+      i++;
+    }
   }
 
   // Reads a fetch Response body as SSE framing and calls onEvent for each
@@ -186,11 +282,13 @@ export const WIDGET_SDK_SOURCE = `(function () {
             state.conversationId = event.conversationId;
           } else if (event.type === "token") {
             assistant.root.classList.remove("ai-widget-typing");
-            assistant.textEl.textContent += event.text;
+            assistant.raw += event.text;
+            renderAssistantText(assistant.textEl, assistant.raw);
             elements.messages.scrollTop = elements.messages.scrollHeight;
           } else if (event.type === "handoff") {
             assistant.root.classList.remove("ai-widget-typing");
-            assistant.textEl.textContent = event.message;
+            assistant.raw = event.message;
+            renderAssistantText(assistant.textEl, assistant.raw);
           } else if (event.type === "error") {
             assistant.root.classList.remove("ai-widget-typing");
             assistant.root.classList.add("ai-widget-error");
@@ -262,7 +360,7 @@ export const WIDGET_SDK_SOURCE = `(function () {
             if (state.seenMessageIds[message.id]) return;
             state.seenMessageIds[message.id] = true;
             if (message.role === "assistant") {
-              appendBubble(elements.messages, "assistant", config).textEl.textContent = message.content;
+              renderAssistantText(appendBubble(elements.messages, "assistant", config).textEl, message.content);
             }
           });
         })
@@ -312,6 +410,14 @@ export const WIDGET_SDK_SOURCE = `(function () {
       ".ai-widget-bubble-error { background: #fdecea; color: #b3261e; }",
       ".ai-widget-bubble-time { font-size: 10px; opacity: 0.7; align-self: flex-end; }",
       ".ai-widget-typing .ai-widget-bubble-text::after { content: '...'; }",
+      ".ai-widget-bubble-text { display: block; }",
+      ".ai-widget-paragraph { margin: 0 0 8px; }",
+      ".ai-widget-paragraph:last-child { margin-bottom: 0; }",
+      ".ai-widget-list { margin: 4px 0 8px; padding-left: 18px; }",
+      ".ai-widget-list:last-child { margin-bottom: 0; }",
+      ".ai-widget-list li { margin-bottom: 4px; }",
+      ".ai-widget-bubble-text a { color: inherit; text-decoration: underline; word-break: break-all; }",
+      ".ai-widget-bubble-text strong { font-weight: 600; }",
       ".ai-widget-input-row { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid #eee; }",
       ".ai-widget-input {",
       "  flex: 1; border: 1px solid #ddd; border-radius: 999px; padding: 8px 12px; font-size: 13px; outline: none;",

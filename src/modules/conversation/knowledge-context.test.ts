@@ -46,6 +46,24 @@ describe("appendKnowledgeContext", () => {
     expect(result).not.toContain("undefined");
   });
 
+  it("instructs the model to list every relevant item rather than a few examples, and to group/recommend by industry", () => {
+    const result = appendKnowledgeContext("BASE", [makeChunk()], FALLBACK);
+    expect(result).toMatch(/every distinct item/i);
+    expect(result).toMatch(/group them by industry or service/i);
+    expect(result).toMatch(/most relevantly similar items/i);
+  });
+
+  it("instructs the model to format bare domain names as clickable markdown links", () => {
+    const result = appendKnowledgeContext("BASE", [makeChunk()], FALLBACK);
+    expect(result).toMatch(/clickable markdown link/i);
+    expect(result).toContain("https://");
+  });
+
+  it("instructs the model to keep the conversation moving instead of ending on the fallback message alone", () => {
+    const result = appendKnowledgeContext("BASE", [makeChunk()], FALLBACK);
+    expect(result).toMatch(/don't end the reply there|keeps moving/i);
+  });
+
   it("always preserves the original base prompt unchanged", () => {
     const base = "IDENTITY: You are Bloom Bot.";
     const withChunks = appendKnowledgeContext(base, [makeChunk()], FALLBACK);

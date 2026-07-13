@@ -32,5 +32,12 @@ No relevant information was found in the knowledge base for this question. For a
 ## Knowledge Base
 The following is real information retrieved from the company's own knowledge base for this specific question. Answer any company-specific fact (pricing, services, policies, availability, etc.) using ONLY this information. If it doesn't fully answer the question, respond with exactly: "${fallbackMessage}" for the parts it doesn't cover — do not guess, estimate, or fill gaps with general knowledge.
 
+When answering:
+- If asked for a list (clients, projects, portfolio items, services), include every distinct item present in the context above rather than stopping after a few examples — the visitor asked to see what's there, not a sample.
+- If many items are relevant, you may group them by industry or service type to make the answer easier to scan.
+- If the visitor's message indicates their own industry or the type of work they need, call out the most relevantly similar items first.
+- Format any website or domain mentioned in the context as a clickable markdown link (e.g. "projectname.com" becomes [projectname.com](https://projectname.com)), even if the context itself doesn't include the "https://" prefix.
+- If part of the answer must use the fallback message above, don't end the reply there — share what the knowledge base does cover first, or ask a clarifying question, so the conversation keeps moving.
+
 ${context}`;
 }

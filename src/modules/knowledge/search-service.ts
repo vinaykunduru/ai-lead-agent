@@ -107,7 +107,13 @@ export type ConversationRetrievalChunk = {
   similarity: number;
 };
 
-const CONVERSATION_RETRIEVAL_LIMIT = 5;
+// Raised from 5: a query like "list your clients" or "show me your
+// portfolio" needs enough chunks to cover a whole listing page, not just
+// the single highest-similarity chunk — a portfolio page split across
+// several chunks was losing half its content when only 5 total chunks
+// (competing against other, less relevant documents) made it into the
+// prompt.
+const CONVERSATION_RETRIEVAL_LIMIT = 8;
 
 /**
  * The Conversation Engine's retrieval step (module spec §3/§8) —
