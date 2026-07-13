@@ -12,6 +12,7 @@ import { getAiProvider } from "@/providers/ai";
 import { resolveConversation, resolveSession, touchActivity } from "./session-service";
 import { insertMessage, listMessages, updateMessage } from "./message-service";
 import { buildHistoryWindow } from "./memory";
+import { appendKnowledgeContext } from "./knowledge-context";
 import { confidenceFromSimilarity, recordCitations } from "./citations";
 import { recordUsage } from "./usage-service";
 import { findLeadIdForConversation } from "@/modules/inbox/shared";
@@ -105,7 +106,11 @@ export async function handleIncomingMessage(
 
   // Generate Structured Prompt → Render Provider Prompt
   const structuredPrompt = generateSystemPrompt(behaviourConfig);
-  const renderedPrompt = renderStructuredPrompt(behaviourConfig.profile.aiProvider, structuredPrompt);
+  const renderedPrompt = appendKnowledgeContext(
+    renderStructuredPrompt(behaviourConfig.profile.aiProvider, structuredPrompt),
+    retrievedChunks,
+    structuredPrompt.guardrails.fallbackMessage,
+  );
 
   const history = await listMessages(conversation.id);
   const historyWindow = buildHistoryWindow(history.map((m) => ({ role: m.role, content: m.content })));
