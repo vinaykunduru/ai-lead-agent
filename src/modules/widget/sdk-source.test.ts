@@ -48,6 +48,24 @@ describe("WIDGET_SDK_SOURCE", () => {
     expect(pollStartIndex).toBeGreaterThan(doneIndex);
   });
 
+  it("skips a poll tick while a later message's own stream is in flight", () => {
+    // Regression test: startPolling() begins only after the *first*
+    // message's stream resolves, but the interval it starts keeps running
+    // for the rest of the session — including while a *second, third, ...*
+    // message is streaming. A poll tick landing in the same window the
+    // first-message fix was written for (after the DB write, before the
+    // client processes "done") would render that later reply twice. The
+    // interval callback must bail out early while state.sending is true.
+    const intervalBody = WIDGET_SDK_SOURCE.match(
+      /pollTimer = setInterval\(function \(\) \{([\s\S]*?)\}, POLL_INTERVAL_MS\)/,
+    );
+    expect(intervalBody).not.toBeNull();
+    const guardIndex = intervalBody![1].indexOf("if (state.sending) return;");
+    const urlIndex = intervalBody![1].indexOf("var url =");
+    expect(guardIndex).toBeGreaterThan(-1);
+    expect(urlIndex).toBeGreaterThan(guardIndex);
+  });
+
   it("handles the handoff event (Human Takeover) without treating it as an error", () => {
     expect(WIDGET_SDK_SOURCE).toContain('"handoff"');
   });

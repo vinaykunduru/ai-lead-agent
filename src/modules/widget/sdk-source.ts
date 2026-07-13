@@ -233,6 +233,17 @@ export const WIDGET_SDK_SOURCE = `(function () {
   function startPolling(elements, config) {
     if (pollTimer || !state.conversationId) return;
     pollTimer = setInterval(function () {
+      // A later message's own SSE stream is currently in flight (this
+      // function only runs once, after the first message resolves, and
+      // keeps ticking for the rest of the session — it does not know
+      // whether a subsequent sendMessage() call is in progress). Skipping
+      // the tick here avoids a race where this poll sees the assistant's
+      // reply in the database (already status='complete') before the SSE
+      // "done" event reaches the browser and marks it seen, rendering the
+      // same reply a second time. The very next tick after sending
+      // finishes will correctly pick up only genuinely new messages.
+      if (state.sending) return;
+
       var url =
         apiBase +
         "/api/widget/conversations/" +
