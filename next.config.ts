@@ -3,15 +3,16 @@ import { withSentryConfig } from "@sentry/nextjs";
 
 const nextConfig: NextConfig = {
   // jsdom (modules/knowledge/extraction/website.ts, used for website-import
-  // text extraction) has a transitive dependency
-  // (html-encoding-sniffer -> @exodus/bytes) that ships ESM-only. Turbopack's
-  // production bundler tries to inline jsdom into whatever route imports it
-  // — including /api/inngest, since that's where the knowledge-processing
-  // job function lives — and its CJS `require()` shim can't load that ESM
-  // module, crashing the entire route with ERR_REQUIRE_ESM before it ever
-  // runs. Marking jsdom external leaves it as a genuine runtime
-  // node_modules dependency instead, resolved by Node's own (correct)
-  // ESM/CJS interop rather than Turbopack's bundler.
+  // text extraction) is only actually needed by one job handler, not by
+  // every /api/inngest request — website.ts loads it via a dynamic import()
+  // at the point of use rather than a module-scope import, specifically so
+  // this route's module graph doesn't eagerly evaluate it. Marking it
+  // external here keeps Turbopack from inlining/bundling it regardless,
+  // leaving it as a genuine runtime node_modules dependency. This is
+  // unrelated to (and doesn't by itself fix) the ERR_REQUIRE_ESM incident —
+  // see README.md's "Known dependency pins" section and the pnpm.overrides
+  // entry in package.json for the actual root cause and fix
+  // (html-encoding-sniffer's own dependency on ESM-only @exodus/bytes).
   serverExternalPackages: ["jsdom"],
 };
 

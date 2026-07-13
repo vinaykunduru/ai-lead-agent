@@ -238,10 +238,36 @@ suspended..." rather than any company data, even briefly.
 - The embedded widget and its public-key resolution endpoint are not built
   yet — that's the next phase.
 
-## Known dependency pin
+## Known dependency pins
 
 `zod` is pinned to `~4.0.17` — see the note in CLAUDE.md §9 before bumping it
 or `@hookform/resolvers`.
+
+`html-encoding-sniffer` (a transitive dependency of `jsdom`, used only by
+`modules/knowledge/extraction/website.ts` for website-import text extraction)
+is forced to `4.0.0` via `pnpm.overrides` in `package.json`, overriding
+jsdom's own declared `^6.0.0`. **Reason:** `html-encoding-sniffer@6.0.0`
+depends on `@exodus/bytes@1.x`, which ships `"type": "module"` with no
+CommonJS build at all. `html-encoding-sniffer`'s own code does a synchronous
+`require("@exodus/bytes/encoding-lite.js")`, which is a hard `ERR_REQUIRE_ESM`
+failure under Node's CJS loader in *any* environment — this crashed
+`/api/inngest` in production (that route's module graph pulls in
+website-import extraction, which pulls in jsdom). `html-encoding-sniffer@4.0.0`
+uses `whatwg-encoding` instead — a plain CJS package — and exports the same
+function signature jsdom calls (`sniffHTMLEncoding(uint8Array, options)`),
+confirmed against jsdom's actual call sites in `jsdom/lib/api.js` and
+`HTMLFrameElement-impl.js`. One known, inert behavioral difference: v6 added
+an `xml` option affecting default-encoding and meta-charset-prescan behavior
+for XML content specifically; v4 silently ignores that option. This never
+matters here because `website.ts` only ever constructs a `JSDOM` after
+verifying the fetched response's `Content-Type` includes `text/html` — real
+XML/XHTML responses are rejected before reaching jsdom.
+
+**Safe to remove this override once either:** (a) jsdom upgrades past 29.x to
+a version that no longer depends on `html-encoding-sniffer@6.x`/`@exodus/bytes`
+for HTML use cases, or (b) `@exodus/bytes` ships a CommonJS build/export
+condition. Check `pnpm why html-encoding-sniffer` after any jsdom bump to see
+what it resolves to before considering the override removable.
 
 ## Roadmap
 
