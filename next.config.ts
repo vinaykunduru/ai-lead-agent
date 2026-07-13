@@ -10,9 +10,8 @@ const nextConfig: NextConfig = {
   // external here keeps Turbopack from inlining/bundling it regardless,
   // leaving it as a genuine runtime node_modules dependency. This is
   // unrelated to (and doesn't by itself fix) the ERR_REQUIRE_ESM incident —
-  // see README.md's "Known dependency pins" section and the pnpm.overrides
-  // entry in package.json for the actual root cause and fix
-  // (html-encoding-sniffer's own dependency on ESM-only @exodus/bytes).
+  // see README.md's "Known dependency pins" section and the exact `jsdom`
+  // version pin in package.json for the actual root cause and fix.
   serverExternalPackages: ["jsdom"],
 };
 

@@ -243,31 +243,32 @@ suspended..." rather than any company data, even briefly.
 `zod` is pinned to `~4.0.17` — see the note in CLAUDE.md §9 before bumping it
 or `@hookform/resolvers`.
 
-`html-encoding-sniffer` (a transitive dependency of `jsdom`, used only by
-`modules/knowledge/extraction/website.ts` for website-import text extraction)
-is forced to `4.0.0` via `pnpm.overrides` in `package.json`, overriding
-jsdom's own declared `^6.0.0`. **Reason:** `html-encoding-sniffer@6.0.0`
-depends on `@exodus/bytes@1.x`, which ships `"type": "module"` with no
-CommonJS build at all. `html-encoding-sniffer`'s own code does a synchronous
-`require("@exodus/bytes/encoding-lite.js")`, which is a hard `ERR_REQUIRE_ESM`
-failure under Node's CJS loader in *any* environment — this crashed
-`/api/inngest` in production (that route's module graph pulls in
-website-import extraction, which pulls in jsdom). `html-encoding-sniffer@4.0.0`
-uses `whatwg-encoding` instead — a plain CJS package — and exports the same
-function signature jsdom calls (`sniffHTMLEncoding(uint8Array, options)`),
-confirmed against jsdom's actual call sites in `jsdom/lib/api.js` and
-`HTMLFrameElement-impl.js`. One known, inert behavioral difference: v6 added
-an `xml` option affecting default-encoding and meta-charset-prescan behavior
-for XML content specifically; v4 silently ignores that option. This never
-matters here because `website.ts` only ever constructs a `JSDOM` after
-verifying the fetched response's `Content-Type` includes `text/html` — real
-XML/XHTML responses are rejected before reaching jsdom.
+`jsdom` is pinned to the **exact** version `27.3.0` (not a caret range), with
+`@types/jsdom` pinned to match at `27.0.0`. **Reason:** starting at jsdom
+28.0.0, several of jsdom's own dependencies (`html-encoding-sniffer@6.x` and
+`whatwg-url@16.x`, pulled in both directly and via `data-urls`) began
+depending on `@exodus/bytes`, which ships `"type": "module"` with no
+CommonJS build at all. Anything that does a synchronous
+`require("@exodus/bytes/...")` — which both of those packages' own code
+does — hits a hard `ERR_REQUIRE_ESM` failure under Node's CJS loader in *any*
+environment. This crashed `/api/inngest` in production (that route's module
+graph pulls in website-import extraction, which pulls in jsdom) — first via
+`html-encoding-sniffer`, then again via `whatwg-url` after an initial fix
+that only pinned `html-encoding-sniffer` (an earlier, insufficient attempt —
+see git history — that missed the second, independent occurrence).
 
-**Safe to remove this override once either:** (a) jsdom upgrades past 29.x to
-a version that no longer depends on `html-encoding-sniffer@6.x`/`@exodus/bytes`
-for HTML use cases, or (b) `@exodus/bytes` ships a CommonJS build/export
-condition. Check `pnpm why html-encoding-sniffer` after any jsdom bump to see
-what it resolves to before considering the override removable.
+**This is not a one-time fix — jsdom's *own patch releases* can reintroduce
+it.** `jsdom@27.0.0` through `27.3.0` are clean (verified via `npm view
+jsdom@<version> dependencies`), but `jsdom@27.4.0` already reintroduced
+`@exodus/bytes` again. This is why the pin is an exact version, not `^27.0.0`
+— a caret range would silently pull in a broken patch on the next
+`pnpm install`.
+
+**Before ever bumping `jsdom`:** run `pnpm why @exodus/bytes` after the bump
+— it must print nothing at all. If it resolves to anything, do not merge the
+bump; either find a newer jsdom version where it's clean again, or find the
+specific transitive package(s) responsible and reconsider from there. Keep
+`@types/jsdom` in sync with whichever major/minor you land on.
 
 ## Roadmap
 

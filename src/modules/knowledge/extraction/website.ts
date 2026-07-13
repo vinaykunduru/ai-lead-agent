@@ -77,11 +77,11 @@ export async function extractWebsiteText(rawUrl: string): Promise<WebsiteExtract
     clearTimeout(timeout);
   }
 
-  // Loaded lazily (not at module scope) so importing this file — e.g. via the
-  // /api/inngest route's module graph — never pulls in jsdom's ESM-only
-  // transitive dependency (html-encoding-sniffer -> @exodus/bytes) unless a
-  // website-import job actually runs. Dynamic import() also uses Node's ESM
-  // loader, which (unlike require()) can load that ESM-only dependency at all.
+  // Loaded lazily (not at module scope) so importing this file — e.g. via
+  // the /api/inngest route's module graph — never pulls jsdom in unless a
+  // website-import job actually runs. jsdom itself is pinned to an exact
+  // version in package.json for an unrelated reason — see README.md's
+  // "Known dependency pins".
   const [{ JSDOM }, { Readability }] = await Promise.all([import("jsdom"), import("@mozilla/readability")]);
 
   const dom = new JSDOM(html, { url: url.toString() });

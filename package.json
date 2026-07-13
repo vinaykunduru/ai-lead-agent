@@ -25,7 +25,7 @@
     "franc-min": "^6.2.0",
     "gpt-tokenizer": "^3.4.0",
     "inngest": "^4.12.0",
-    "jsdom": "^29.1.1",
+    "jsdom": "27.3.0",
     "lucide-react": "^1.24.0",
     "mammoth": "^1.12.0",
     "next": "16.2.10",
@@ -44,7 +44,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
-    "@types/jsdom": "^28.0.3",
+    "@types/jsdom": "27.0.0",
     "@types/node": "^20",
     "@types/pg": "^8.20.0",
     "@types/react": "^19",
@@ -60,10 +60,5 @@
     "vite-tsconfig-paths": "^6.1.1",
     "vitest": "^4.1.10",
     "ws": "^8.21.0"
-  },
-  "pnpm": {
-    "overrides": {
-      "html-encoding-sniffer": "4.0.0"
-    }
   }
 }
