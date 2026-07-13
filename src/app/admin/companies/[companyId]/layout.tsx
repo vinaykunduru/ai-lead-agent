@@ -1,8 +1,8 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { z } from "zod";
 import { getCompanyById } from "@/modules/organizations/service";
 import { OrganizationStatusBadge } from "@/shared/components/status-badge";
+import { BackLink } from "@/shared/components/back-link";
 import { CompanyDetailNav } from "./company-detail-nav";
 
 export default async function CompanyDetailLayout({
@@ -28,9 +28,7 @@ export default async function CompanyDetailLayout({
   return (
     <div>
       <div className="flex flex-col gap-2 border-b px-6 py-5">
-        <Link href="/admin/companies" className="text-sm text-muted-foreground hover:underline">
-          ← Companies
-        </Link>
+        <BackLink href="/admin/companies" label="Companies" />
         <div className="flex items-center gap-3">
           <h1 className="text-xl font-semibold tracking-tight">{company.name}</h1>
           <OrganizationStatusBadge status={company.status} />

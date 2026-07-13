@@ -6,8 +6,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 import { listCompanyUsers } from "@/modules/organizations/service";
+import { MembershipStatusBadge } from "@/shared/components/status-badge";
 import { CreateFirstOwnerForm } from "./create-first-owner-form";
 
 export default async function CompanyUsersPage({
@@ -38,9 +38,7 @@ export default async function CompanyUsersPage({
             <TableCell className="font-medium">{user.email ?? "—"}</TableCell>
             <TableCell className="capitalize">{user.role}</TableCell>
             <TableCell>
-              <Badge variant="secondary" className="capitalize">
-                {user.status}
-              </Badge>
+              <MembershipStatusBadge status={user.status} />
             </TableCell>
             <TableCell className="text-muted-foreground">
               {user.createdAt.toLocaleDateString()}

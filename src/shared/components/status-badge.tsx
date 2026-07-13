@@ -1,16 +1,31 @@
-import { Badge } from "@/components/ui/badge";
-import { cn } from "@/lib/utils";
+import { Badge, type badgeVariants } from "@/components/ui/badge";
+import type { VariantProps } from "class-variance-authority";
 
-const ORGANIZATION_STATUS_STYLES: Record<string, string> = {
-  trial: "bg-amber-100 text-amber-800 hover:bg-amber-100 dark:bg-amber-950 dark:text-amber-300",
-  active:
-    "bg-emerald-100 text-emerald-800 hover:bg-emerald-100 dark:bg-emerald-950 dark:text-emerald-300",
-  suspended: "bg-red-100 text-red-800 hover:bg-red-100 dark:bg-red-950 dark:text-red-300",
+type BadgeVariant = NonNullable<VariantProps<typeof badgeVariants>["variant"]>;
+
+const ORGANIZATION_STATUS_VARIANTS: Record<string, BadgeVariant> = {
+  trial: "warning",
+  active: "success",
+  suspended: "destructive",
 };
 
 export function OrganizationStatusBadge({ status }: { status: string }) {
   return (
-    <Badge variant="secondary" className={cn("capitalize", ORGANIZATION_STATUS_STYLES[status])}>
+    <Badge variant={ORGANIZATION_STATUS_VARIANTS[status] ?? "secondary"} className="capitalize">
+      {status}
+    </Badge>
+  );
+}
+
+const MEMBERSHIP_STATUS_VARIANTS: Record<string, BadgeVariant> = {
+  active: "success",
+  invited: "warning",
+  disabled: "secondary",
+};
+
+export function MembershipStatusBadge({ status }: { status: string }) {
+  return (
+    <Badge variant={MEMBERSHIP_STATUS_VARIANTS[status] ?? "secondary"} className="capitalize">
       {status}
     </Badge>
   );

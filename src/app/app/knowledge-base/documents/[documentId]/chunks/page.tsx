@@ -1,9 +1,9 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { z } from "zod";
 import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/shared/components/page-header";
 import { EmptyState } from "@/shared/components/empty-state";
+import { BackLink } from "@/shared/components/back-link";
 import { getDocument, listDocumentChunks } from "@/modules/knowledge/documents-service";
 import { EmbeddingStatusBadge } from "../../../status-badges";
 import { CopyChunkButton } from "./copy-chunk-button";
@@ -28,12 +28,7 @@ export default async function ChunkViewerPage({
   return (
     <div>
       <div className="border-b px-6 pt-5">
-        <Link
-          href={`/app/knowledge-base/documents/${documentId}`}
-          className="text-sm text-muted-foreground hover:underline"
-        >
-          ← {document.title}
-        </Link>
+        <BackLink href={`/app/knowledge-base/documents/${documentId}`} label={document.title} />
       </div>
       <PageHeader
         title="Chunk viewer"

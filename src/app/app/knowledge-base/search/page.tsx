@@ -1,5 +1,5 @@
-import Link from "next/link";
 import { PageHeader } from "@/shared/components/page-header";
+import { BackLink } from "@/shared/components/back-link";
 import { requireCompanySession } from "@/lib/auth/session";
 import { assertPermission } from "@/modules/permissions";
 import { listCollections } from "@/modules/knowledge/collections-service";
@@ -14,9 +14,7 @@ export default async function KnowledgeSearchPage() {
   return (
     <div>
       <div className="border-b px-6 pt-5">
-        <Link href="/app/knowledge-base" className="text-sm text-muted-foreground hover:underline">
-          ← Knowledge Base
-        </Link>
+        <BackLink href="/app/knowledge-base" label="Knowledge Base" />
       </div>
       <PageHeader
         title="Search"

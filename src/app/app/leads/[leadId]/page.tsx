@@ -1,7 +1,7 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { z } from "zod";
 import { PageHeader } from "@/shared/components/page-header";
+import { BackLink } from "@/shared/components/back-link";
 import { requireCompanySession } from "@/lib/auth/session";
 import { can } from "@/modules/permissions";
 import { getLead } from "@/modules/leads/leads-service";
@@ -51,9 +51,7 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ lea
   return (
     <div>
       <div className="border-b px-6 pt-5">
-        <Link href="/app/leads" className="text-sm text-muted-foreground hover:underline">
-          ← Leads
-        </Link>
+        <BackLink href="/app/leads" label="Leads" />
       </div>
       <PageHeader
         title={lead.name ?? lead.email ?? lead.phone ?? "Unnamed lead"}

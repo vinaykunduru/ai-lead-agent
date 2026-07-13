@@ -1,9 +1,10 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { z } from "zod";
-import { Badge } from "@/components/ui/badge";
+import { Badge, type badgeVariants } from "@/components/ui/badge";
+import type { VariantProps } from "class-variance-authority";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/shared/components/page-header";
+import { BackLink } from "@/shared/components/back-link";
 import { requireCompanySession } from "@/lib/auth/session";
 import { assertPermission } from "@/modules/permissions";
 import { getConversationDetail } from "@/modules/conversation/inspector-service";
@@ -11,11 +12,13 @@ import { loadAiBehaviourForConversation } from "@/modules/ai-behaviour/conversat
 import { generateSystemPrompt } from "@/modules/ai-behaviour/prompt-generator";
 import { renderStructuredPrompt } from "@/modules/ai-behaviour/rendering";
 
-const STATUS_STYLES: Record<string, string> = {
-  pending: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300",
-  streaming: "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300",
-  complete: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300",
-  error: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300",
+type BadgeVariant = NonNullable<VariantProps<typeof badgeVariants>["variant"]>;
+
+const STATUS_VARIANTS: Record<string, BadgeVariant> = {
+  pending: "secondary",
+  streaming: "outline",
+  complete: "success",
+  error: "destructive",
 };
 
 export default async function ConversationDetailPage({
@@ -48,9 +51,7 @@ export default async function ConversationDetailPage({
   return (
     <div>
       <div className="border-b px-6 pt-5">
-        <Link href="/app/conversations" className="text-sm text-muted-foreground hover:underline">
-          ← Conversations
-        </Link>
+        <BackLink href="/app/conversations" label="Conversations" />
       </div>
       <PageHeader
         title={detail.conversation.widgetName}
@@ -77,7 +78,7 @@ export default async function ConversationDetailPage({
                     <Badge variant="outline" className="capitalize">
                       {message.role}
                     </Badge>
-                    <Badge className={`capitalize ${STATUS_STYLES[message.status] ?? ""}`}>
+                    <Badge variant={STATUS_VARIANTS[message.status] ?? "secondary"} className="capitalize">
                       {message.status}
                     </Badge>
                     <span>{message.createdAt.toLocaleString()}</span>

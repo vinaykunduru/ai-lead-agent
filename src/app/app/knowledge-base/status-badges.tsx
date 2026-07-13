@@ -1,18 +1,26 @@
-import { Badge } from "@/components/ui/badge";
+import { Badge, type badgeVariants } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import type { VariantProps } from "class-variance-authority";
 
-const DOCUMENT_STATUS_STYLES: Record<string, string> = {
-  pending: "bg-amber-100 text-amber-800 hover:bg-amber-100 dark:bg-amber-950 dark:text-amber-300",
-  processing: "bg-blue-100 text-blue-800 hover:bg-blue-100 dark:bg-blue-950 dark:text-blue-300",
-  ready:
-    "bg-emerald-100 text-emerald-800 hover:bg-emerald-100 dark:bg-emerald-950 dark:text-emerald-300",
-  failed: "bg-red-100 text-red-800 hover:bg-red-100 dark:bg-red-950 dark:text-red-300",
-  archived: "bg-gray-100 text-gray-700 hover:bg-gray-100 dark:bg-gray-800 dark:text-gray-300",
+type BadgeVariant = NonNullable<VariantProps<typeof badgeVariants>["variant"]>;
+
+const DOCUMENT_STATUS_VARIANTS: Record<string, BadgeVariant> = {
+  pending: "warning",
+  ready: "success",
+  failed: "destructive",
+  archived: "secondary",
 };
+// "processing" has no dedicated semantic slot (not success/warning/danger) —
+// tinted with the primary brand color instead, applied as an addition on
+// top of the outline variant rather than a new Badge variant for one state.
+const PROCESSING_CLASS = "bg-primary/10 text-primary border-transparent";
 
 export function DocumentStatusBadge({ status }: { status: string }) {
+  if (status === "processing") {
+    return <Badge className={cn("capitalize", PROCESSING_CLASS)}>{status}</Badge>;
+  }
   return (
-    <Badge variant="secondary" className={cn("capitalize", DOCUMENT_STATUS_STYLES[status])}>
+    <Badge variant={DOCUMENT_STATUS_VARIANTS[status] ?? "secondary"} className="capitalize">
       {status}
     </Badge>
   );
@@ -20,10 +28,7 @@ export function DocumentStatusBadge({ status }: { status: string }) {
 
 export function EmbeddingStatusBadge({ status }: { status: string }) {
   return (
-    <Badge
-      variant="outline"
-      className={cn("capitalize", status === "ready" && "border-emerald-300 text-emerald-700 dark:text-emerald-300")}
-    >
+    <Badge variant={status === "ready" ? "success" : "outline"} className="capitalize">
       {status}
     </Badge>
   );

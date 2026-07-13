@@ -1,9 +1,9 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { z } from "zod";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/shared/components/page-header";
+import { BackLink } from "@/shared/components/back-link";
 import { requireCompanySession } from "@/lib/auth/session";
 import { can } from "@/modules/permissions";
 import { getInboxConversation } from "@/modules/inbox/inbox-service";
@@ -28,9 +28,7 @@ export default async function InboxConversationPage({
   return (
     <div>
       <div className="border-b px-6 pt-5">
-        <Link href="/app/inbox" className="text-sm text-muted-foreground hover:underline">
-          ← Inbox
-        </Link>
+        <BackLink href="/app/inbox" label="Inbox" />
       </div>
       <PageHeader
         title={detail.conversation.widgetName}

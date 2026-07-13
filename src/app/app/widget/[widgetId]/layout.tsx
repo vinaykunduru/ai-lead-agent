@@ -1,7 +1,7 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { z } from "zod";
 import { PageHeader } from "@/shared/components/page-header";
+import { BackLink } from "@/shared/components/back-link";
 import { getWidget } from "@/modules/widget/widgets-service";
 import { WidgetStatusBadge } from "../status-badges";
 import { WidgetNav } from "./widget-nav";
@@ -26,9 +26,7 @@ export default async function WidgetDetailLayout({
   return (
     <div>
       <div className="border-b px-6 pt-5">
-        <Link href="/app/widget" className="text-sm text-muted-foreground hover:underline">
-          ← Widgets
-        </Link>
+        <BackLink href="/app/widget" label="Widgets" />
       </div>
       <PageHeader
         title={widget.name}

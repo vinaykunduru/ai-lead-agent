@@ -9,8 +9,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 import { listAllCompanyUsers } from "@/modules/organizations/service";
+import { MembershipStatusBadge } from "@/shared/components/status-badge";
 
 export default async function PlatformUsersPage() {
   const users = await listAllCompanyUsers();
@@ -44,9 +44,7 @@ export default async function PlatformUsersPage() {
                   </TableCell>
                   <TableCell className="capitalize">{user.role}</TableCell>
                   <TableCell>
-                    <Badge variant="secondary" className="capitalize">
-                      {user.status}
-                    </Badge>
+                    <MembershipStatusBadge status={user.status} />
                   </TableCell>
                   <TableCell className="text-muted-foreground">
                     {user.createdAt.toLocaleDateString()}

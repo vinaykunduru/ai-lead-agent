@@ -1,15 +1,22 @@
-import { Badge } from "@/components/ui/badge";
+import { Badge, type badgeVariants } from "@/components/ui/badge";
 import type { Lead } from "@/db/schema";
+import type { VariantProps } from "class-variance-authority";
 
-const PRIORITY_STYLES: Record<Lead["priority"], string> = {
-  low: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300",
-  medium: "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300",
-  high: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300",
-  urgent: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300",
+type BadgeVariant = NonNullable<VariantProps<typeof badgeVariants>["variant"]>;
+
+const PRIORITY_VARIANTS: Record<Lead["priority"], BadgeVariant> = {
+  low: "secondary",
+  medium: "outline",
+  high: "warning",
+  urgent: "destructive",
 };
 
 export function PriorityBadge({ priority }: { priority: Lead["priority"] }) {
-  return <Badge className={`capitalize ${PRIORITY_STYLES[priority]}`}>{priority}</Badge>;
+  return (
+    <Badge variant={PRIORITY_VARIANTS[priority]} className="capitalize">
+      {priority}
+    </Badge>
+  );
 }
 
 export function ScoreBadge({ score }: { score: number }) {
