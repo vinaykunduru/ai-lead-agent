@@ -243,32 +243,29 @@ suspended..." rather than any company data, even briefly.
 `zod` is pinned to `~4.0.17` — see the note in CLAUDE.md §9 before bumping it
 or `@hookform/resolvers`.
 
-`jsdom` is pinned to the **exact** version `27.3.0` (not a caret range), with
-`@types/jsdom` pinned to match at `27.0.0`. **Reason:** starting at jsdom
-28.0.0, several of jsdom's own dependencies (`html-encoding-sniffer@6.x` and
-`whatwg-url@16.x`, pulled in both directly and via `data-urls`) began
-depending on `@exodus/bytes`, which ships `"type": "module"` with no
-CommonJS build at all. Anything that does a synchronous
-`require("@exodus/bytes/...")` — which both of those packages' own code
-does — hits a hard `ERR_REQUIRE_ESM` failure under Node's CJS loader in *any*
-environment. This crashed `/api/inngest` in production (that route's module
-graph pulls in website-import extraction, which pulls in jsdom) — first via
-`html-encoding-sniffer`, then again via `whatwg-url` after an initial fix
-that only pinned `html-encoding-sniffer` (an earlier, insufficient attempt —
-see git history — that missed the second, independent occurrence).
+**Website-import extraction uses `linkedom`, not `jsdom`.** jsdom was the
+original choice (see git history), but its dependency tree repeatedly and
+unpredictably reintroduced ESM-only sub-dependencies that crashed
+`/api/inngest` with `ERR_REQUIRE_ESM` in production — three separate,
+independent occurrences across three unrelated subsystems: `@exodus/bytes`
+via `html-encoding-sniffer`, then again via `whatwg-url`, then again via
+`cssstyle -> @asamuzakjp/css-color -> @csstools/css-calc`. Each fix attempt
+(pinning the specific offending package, then pinning jsdom itself to an
+exact clean version) got invalidated by the next one, because jsdom's own
+sub-dependencies still float on caret ranges that drift forward over time,
+and jsdom itself is broadly, ecosystem-wide adopting these modern ESM-only
+utility scopes across multiple of its subsystems.
 
-**This is not a one-time fix — jsdom's *own patch releases* can reintroduce
-it.** `jsdom@27.0.0` through `27.3.0` are clean (verified via `npm view
-jsdom@<version> dependencies`), but `jsdom@27.4.0` already reintroduced
-`@exodus/bytes` again. This is why the pin is an exact version, not `^27.0.0`
-— a caret range would silently pull in a broken patch on the next
-`pnpm install`.
-
-**Before ever bumping `jsdom`:** run `pnpm why @exodus/bytes` after the bump
-— it must print nothing at all. If it resolves to anything, do not merge the
-bump; either find a newer jsdom version where it's clean again, or find the
-specific transitive package(s) responsible and reconsider from there. Keep
-`@types/jsdom` in sync with whichever major/minor you land on.
+`linkedom` replaces it in `modules/knowledge/extraction/website.ts` — the
+only place jsdom was used. It has a minimal, stable dependency tree
+(`css-select`, `cssom`, `html-escaper`, `htmlparser2`, `uhyphen` — none of
+the problematic scopes) and ships genuine dual CJS/ESM `exports`, so it
+doesn't have jsdom's class of bug at all. It's also the pattern linkedom's
+own README documents as a drop-in JSDOM facade for exactly this kind of use
+(`parseHTML(html, { location: { href } })` → `document`, fed directly into
+`@mozilla/readability`). If `jsdom` shows up again in `pnpm why <package>`
+output, it's only vitest's own optional peer dependency for its (unused
+here) `jsdom` test environment — not application code.
 
 ## Roadmap
 

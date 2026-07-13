@@ -32,15 +32,26 @@ function buildMinimalPdf(text: string): Buffer {
 }
 
 /**
- * One-time regression test for the html-encoding-sniffer@6 / @exodus/bytes
- * ERR_REQUIRE_ESM incident (fixed by pinning html-encoding-sniffer to 4.0.0
- * via pnpm.overrides in package.json — see the comment there and in
- * next.config.ts). Exercises the exact real pipeline that was broken in
- * production: website import -> extraction (jsdom) -> chunking -> real
- * Voyage embeddings -> pgvector storage -> semantic retrieval -> a real AI
- * provider call -> citation recording. No mocks anywhere in this path —
- * per CLAUDE.md's standing rule, this only runs against a real Supabase
- * project with real provider credentials, and skips cleanly otherwise.
+ * Regression test for the website-import extraction incident: jsdom's
+ * dependency tree repeatedly and unpredictably reintroduced ESM-only
+ * sub-dependencies (@exodus/bytes via html-encoding-sniffer, then again via
+ * whatwg-url, then again via cssstyle -> @asamuzakjp/css-color ->
+ * @csstools/css-calc), each crashing /api/inngest with ERR_REQUIRE_ESM in
+ * production across three separate, independent occurrences. Fixed by
+ * replacing jsdom with linkedom (see modules/knowledge/extraction/website.ts
+ * and README.md's "Known dependency pins"), which has a minimal, stable
+ * dependency tree with no such history.
+ *
+ * The website-import test below deliberately fetches a real page with actual
+ * CSS content (not a bare-bones synthetic fixture) — an earlier, narrower
+ * version of this test never exercised jsdom's CSS-parsing code path, which
+ * is exactly the path that caused the third occurrence to go undetected
+ * until production. Exercises the exact real pipeline that was broken:
+ * website import -> extraction -> chunking -> real Voyage embeddings ->
+ * pgvector storage -> semantic retrieval -> a real AI provider call ->
+ * citation recording. No mocks anywhere in this path — per CLAUDE.md's
+ * standing rule, this only runs against a real Supabase project with real
+ * provider credentials, and skips cleanly otherwise.
  */
 
 const hasLiveEnv = Boolean(
@@ -53,7 +64,7 @@ const hasLiveEnv = Boolean(
     process.env.OPENAI_API_KEY,
 );
 
-describe.skipIf(!hasLiveEnv)("jsdom/html-encoding-sniffer fix — real end-to-end pipeline", () => {
+describe.skipIf(!hasLiveEnv)("website import fix (linkedom) — real end-to-end pipeline", () => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let mod: any;
   let org: { id: string };
@@ -91,7 +102,7 @@ describe.skipIf(!hasLiveEnv)("jsdom/html-encoding-sniffer fix — real end-to-en
 
     const stamp = Date.now();
     const { data: userData } = await mod.admin.auth.admin.createUser({
-      email: `jsdom-fix-test-${stamp}@example.com`,
+      email: `website-import-test-${stamp}@example.com`,
       password: crypto.randomUUID(),
       email_confirm: true,
     });
@@ -99,7 +110,7 @@ describe.skipIf(!hasLiveEnv)("jsdom/html-encoding-sniffer fix — real end-to-en
 
     const [orgRow] = await mod.db
       .insert(mod.schema.organizations)
-      .values({ name: "jsdom Fix Test Org", slug: `jsdom-fix-test-${stamp}` })
+      .values({ name: "Website Import Test Org", slug: `website-import-test-${stamp}` })
       .returning();
     org = { id: orgRow.id };
 
@@ -182,7 +193,7 @@ describe.skipIf(!hasLiveEnv)("jsdom/html-encoding-sniffer fix — real end-to-en
   });
 
   it(
-    "processes a REAL website import end-to-end: fetch -> jsdom/Readability -> chunk -> real Voyage embeddings -> ready",
+    "processes a REAL website import end-to-end: fetch (real CSS content) -> linkedom/Readability -> chunk -> real Voyage embeddings -> ready",
     async () => {
       const [doc] = await mod.db
         .insert(mod.schema.knowledgeDocuments)
@@ -190,8 +201,8 @@ describe.skipIf(!hasLiveEnv)("jsdom/html-encoding-sniffer fix — real end-to-en
           organizationId: org.id,
           collectionId: collection.id,
           type: "website",
-          title: "https://bloomdigital.co.in",
-          sourceUrl: "https://bloomdigital.co.in",
+          title: "https://bloomdigital.co.in/services",
+          sourceUrl: "https://bloomdigital.co.in/services",
           uploadedBy: user.id,
         })
         .returning();

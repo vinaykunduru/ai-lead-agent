@@ -40,9 +40,8 @@ function assertSafeUrl(url: URL): void {
  * Fetches exactly one page (no crawling — spec: import ONE web page only)
  * and extracts clean readable text the same way Firefox's Reader Mode
  * does: strips scripts, styles, nav, headers, footers, and other
- * non-article chrome. jsdom does not execute embedded scripts unless
- * `runScripts: "dangerously"` is passed, which it is not — parsing
- * untrusted HTML here does not execute it.
+ * non-article chrome. linkedom never executes embedded scripts (it has no
+ * scripting engine at all) — parsing untrusted HTML here does not execute it.
  */
 export async function extractWebsiteText(rawUrl: string): Promise<WebsiteExtractionResult> {
   const url = new URL(rawUrl);
@@ -78,14 +77,17 @@ export async function extractWebsiteText(rawUrl: string): Promise<WebsiteExtract
   }
 
   // Loaded lazily (not at module scope) so importing this file — e.g. via
-  // the /api/inngest route's module graph — never pulls jsdom in unless a
-  // website-import job actually runs. jsdom itself is pinned to an exact
-  // version in package.json for an unrelated reason — see README.md's
-  // "Known dependency pins".
-  const [{ JSDOM }, { Readability }] = await Promise.all([import("jsdom"), import("@mozilla/readability")]);
+  // the /api/inngest route's module graph — never pulls this in unless a
+  // website-import job actually runs.
+  const [{ parseHTML }, { Readability }] = await Promise.all([import("linkedom"), import("@mozilla/readability")]);
 
-  const dom = new JSDOM(html, { url: url.toString() });
-  const article = new Readability(dom.window.document).parse();
+  const { document } = parseHTML(html, { location: { href: url.toString() } });
+  // linkedom's Document is structurally compatible with what Readability
+  // actually reads/calls at runtime (querySelectorAll, cloneNode, textContent,
+  // baseURI, etc. — this exact linkedom+Readability pairing is the pattern
+  // documented in linkedom's own README as a JSDOM replacement), but it isn't
+  // nominally typed against TypeScript's lib.dom.d.ts Document.
+  const article = new Readability(document as unknown as Document).parse();
 
   if (!article || !article.textContent?.trim()) {
     throw new Error("Could not extract readable content from this page");
