@@ -16,17 +16,19 @@ import { hasSuspendedOrgMembership } from "@/lib/auth/suspended";
 import { signOutAction } from "@/lib/auth/actions";
 import { DashboardShell, type NavItem } from "@/shared/components/dashboard-shell";
 
+const ICON_CLASS = "size-4 shrink-0";
+
 const NAV_ITEMS: NavItem[] = [
-  { label: "Dashboard", href: "/app", icon: LayoutDashboard },
-  { label: "Analytics", href: "/app/analytics", icon: BarChart3 },
-  { label: "Leads", href: "/app/leads", icon: Users },
-  { label: "Inbox", href: "/app/inbox", icon: Inbox },
-  { label: "Conversations", href: "/app/conversations", icon: MessagesSquare },
-  { label: "Knowledge Base", href: "/app/knowledge-base", icon: BookOpen },
-  { label: "AI Behaviour", href: "/app/ai-behaviour", icon: Sparkles },
-  { label: "Widget", href: "/app/widget", icon: MonitorSmartphone },
-  { label: "Team", href: "/app/team", icon: UsersRound },
-  { label: "Settings", href: "/app/settings", icon: Settings },
+  { label: "Dashboard", href: "/app", icon: <LayoutDashboard className={ICON_CLASS} aria-hidden="true" /> },
+  { label: "Analytics", href: "/app/analytics", icon: <BarChart3 className={ICON_CLASS} aria-hidden="true" /> },
+  { label: "Leads", href: "/app/leads", icon: <Users className={ICON_CLASS} aria-hidden="true" /> },
+  { label: "Inbox", href: "/app/inbox", icon: <Inbox className={ICON_CLASS} aria-hidden="true" /> },
+  { label: "Conversations", href: "/app/conversations", icon: <MessagesSquare className={ICON_CLASS} aria-hidden="true" /> },
+  { label: "Knowledge Base", href: "/app/knowledge-base", icon: <BookOpen className={ICON_CLASS} aria-hidden="true" /> },
+  { label: "AI Behaviour", href: "/app/ai-behaviour", icon: <Sparkles className={ICON_CLASS} aria-hidden="true" /> },
+  { label: "Widget", href: "/app/widget", icon: <MonitorSmartphone className={ICON_CLASS} aria-hidden="true" /> },
+  { label: "Team", href: "/app/team", icon: <UsersRound className={ICON_CLASS} aria-hidden="true" /> },
+  { label: "Settings", href: "/app/settings", icon: <Settings className={ICON_CLASS} aria-hidden="true" /> },
 ];
 
 export default async function CompanyAppLayout({ children }: { children: React.ReactNode }) {

@@ -4,11 +4,17 @@ import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChevronsLeft, ChevronsRight, LogOut, Menu, X, type LucideIcon } from "lucide-react";
+import { ChevronsLeft, ChevronsRight, LogOut, Menu, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 
-export type NavItem = { label: string; href: string; icon?: LucideIcon };
+// icon is a pre-rendered element (e.g. `<LayoutDashboard className="size-4" />`),
+// not a component reference — a raw component type/forwardRef object isn't a
+// serializable prop value across the Server Component -> Client Component
+// boundary (this shell is "use client", but NAV_ITEMS is defined in the
+// server-rendered layout.tsx files), while an already-instantiated JSX
+// element is.
+export type NavItem = { label: string; href: string; icon?: React.ReactNode };
 
 function initialsFor(label: string) {
   const name = label.split("@")[0] ?? label;
@@ -52,7 +58,6 @@ function NavLinks({
     <nav className="flex-1 space-y-0.5 p-3">
       {navItems.map((item) => {
         const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
-        const Icon = item.icon;
         return (
           <Link
             key={item.href}
@@ -71,7 +76,7 @@ function NavLinks({
             {isActive ? (
               <span className="absolute inset-y-1 left-0 w-0.5 rounded-full bg-primary" aria-hidden="true" />
             ) : null}
-            {Icon ? <Icon className="size-4 shrink-0" aria-hidden="true" /> : null}
+            {item.icon}
             {collapsed ? null : <span className="truncate">{item.label}</span>}
           </Link>
         );
