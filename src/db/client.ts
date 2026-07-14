@@ -5,7 +5,12 @@ import postgres from "postgres";
 import { serverEnv } from "@/lib/env.server";
 import * as schema from "./schema";
 
-const queryClient = postgres(serverEnv.DATABASE_URL, { prepare: false });
+// max: 1 — each Vercel serverless invocation gets its own module instance of
+// this client, and many can run concurrently. postgres.js defaults to max:10
+// per instance, which exhausted Supabase's pooler (pool_size: 15) under
+// modest concurrent traffic (EMAXCONNSESSION). Capping at 1 per instance
+// lets far more concurrent invocations fit under the pooler's total limit.
+const queryClient = postgres(serverEnv.DATABASE_URL, { prepare: false, max: 1 });
 
 /**
  * Service-role Drizzle instance. The underlying Postgres role bypasses RLS
