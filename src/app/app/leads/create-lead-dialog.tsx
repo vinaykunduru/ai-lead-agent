@@ -96,8 +96,8 @@ export function CreateLeadDialog({ stages }: { stages: LeadStage[] }) {
             </Select>
           </div>
           <DialogFooter>
-            <Button type="submit" disabled={pending}>
-              {pending ? "Creating..." : "Create lead"}
+            <Button type="submit" loading={pending}>
+              Create lead
             </Button>
           </DialogFooter>
         </form>

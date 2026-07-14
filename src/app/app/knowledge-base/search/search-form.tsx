@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
+import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -48,13 +49,21 @@ export function SearchForm({ collections }: { collections: KnowledgeCollection[]
 
   return (
     <div className="space-y-6">
-      <form onSubmit={runSearch} className="flex flex-col gap-3 sm:flex-row">
-        <Input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search the knowledge base..."
-          className="flex-1"
-        />
+      <form onSubmit={runSearch} className="flex flex-col gap-3 sm:flex-row" aria-busy={pending}>
+        <div className="relative flex-1">
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search the knowledge base..."
+            className={pending ? "pr-9" : undefined}
+          />
+          {pending ? (
+            <Loader2
+              className="absolute top-1/2 right-3 size-4 -translate-y-1/2 animate-spin text-muted-foreground"
+              aria-hidden="true"
+            />
+          ) : null}
+        </div>
         <Select value={collectionId} onValueChange={(value) => setCollectionId(value ?? ALL_COLLECTIONS)}>
           <SelectTrigger className="w-full sm:w-56">
             <SelectValue placeholder="All collections" />
@@ -68,13 +77,13 @@ export function SearchForm({ collections }: { collections: KnowledgeCollection[]
             ))}
           </SelectContent>
         </Select>
-        <Button type="submit" disabled={pending}>
-          {pending ? "Searching..." : "Search"}
+        <Button type="submit" loading={pending}>
+          Search
         </Button>
       </form>
 
       {result ? (
-        <div>
+        <div className={pending ? "opacity-60 transition-opacity duration-150" : "transition-opacity duration-150"} aria-live="polite">
           <p className="mb-3 text-sm text-muted-foreground">
             {result.results.length} result{result.results.length === 1 ? "" : "s"} · {result.responseTimeMs}ms
           </p>

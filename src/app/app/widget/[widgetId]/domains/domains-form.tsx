@@ -119,8 +119,8 @@ export function DomainsForm({
               <Plus className="size-4" />
               Add domain
             </Button>
-            <Button type="button" disabled={pending} onClick={save}>
-              {pending ? "Saving..." : "Save changes"}
+            <Button type="button" loading={pending} onClick={save}>
+              Save changes
             </Button>
           </div>
         ) : null}

@@ -144,8 +144,8 @@ export function BusinessHoursForm({
         </div>
 
         {canUpdate ? (
-          <Button type="button" disabled={pending} onClick={save}>
-            {pending ? "Saving..." : "Save changes"}
+          <Button type="button" loading={pending} onClick={save}>
+            Save changes
           </Button>
         ) : null}
       </CardContent>

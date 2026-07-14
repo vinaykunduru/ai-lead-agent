@@ -71,9 +71,9 @@ export function InboxActions({ conversation, canReply }: { conversation: Convers
         </Badge>
         {canReply ? (
           conversation.owner === "human" ? (
-            <Button size="sm" variant="outline" onClick={resume} disabled={pending}>Resume AI</Button>
+            <Button size="sm" variant="outline" onClick={resume} loading={pending}>Resume AI</Button>
           ) : (
-            <Button size="sm" variant="outline" onClick={takeover} disabled={pending}>Take over</Button>
+            <Button size="sm" variant="outline" onClick={takeover} loading={pending}>Take over</Button>
           )
         ) : null}
       </div>
@@ -86,8 +86,8 @@ export function InboxActions({ conversation, canReply }: { conversation: Convers
             rows={3}
             maxLength={4000}
           />
-          <Button type="submit" size="sm" disabled={pending || !content.trim()}>
-            {pending ? "Sending..." : "Send reply"}
+          <Button type="submit" size="sm" disabled={!content.trim()} loading={pending}>
+            Send reply
           </Button>
         </form>
       ) : null}

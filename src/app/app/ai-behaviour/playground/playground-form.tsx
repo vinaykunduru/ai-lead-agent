@@ -146,8 +146,8 @@ export function PlaygroundForm({ profile, canTest }: { profile: AiProfile; canTe
               </Select>
             </div>
           </div>
-          <Button type="button" disabled={pending} onClick={runTest}>
-            {pending ? "Running preview..." : "Preview"}
+          <Button type="button" loading={pending} onClick={runTest}>
+            Preview
           </Button>
         </CardContent>
       </Card>

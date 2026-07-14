@@ -60,8 +60,8 @@ export function LeadAiPanel({ lead, canUpdate }: { lead: Lead; canUpdate: boolea
             Score: {lead.score}
           </Badge>
           {canUpdate ? (
-            <Button size="sm" variant="outline" onClick={regenerate} disabled={pending}>
-              {pending ? "Generating..." : summary ? "Regenerate" : "Generate summary"}
+            <Button size="sm" variant="outline" onClick={regenerate} loading={pending}>
+              {summary ? "Regenerate" : "Generate summary"}
             </Button>
           ) : null}
         </div>
@@ -125,7 +125,7 @@ export function LeadAiPanel({ lead, canUpdate }: { lead: Lead; canUpdate: boolea
               onChange={(e) => setAdjustment(e.target.value)}
               className="w-20"
             />
-            <Button size="sm" variant="outline" onClick={applyAdjustment} disabled={pending}>Apply</Button>
+            <Button size="sm" variant="outline" onClick={applyAdjustment} loading={pending}>Apply</Button>
           </div>
         ) : null}
       </CardContent>

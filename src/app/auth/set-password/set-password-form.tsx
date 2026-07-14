@@ -65,8 +65,8 @@ export function SetPasswordForm() {
             ) : null}
           </div>
           {formError ? <p className="text-sm text-destructive">{formError}</p> : null}
-          <Button type="submit" className="w-full" disabled={isSubmitting}>
-            {isSubmitting ? "Saving..." : "Set password & continue"}
+          <Button type="submit" className="w-full" loading={isSubmitting}>
+            Set password & continue
           </Button>
         </form>
       </CardContent>

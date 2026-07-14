@@ -135,8 +135,8 @@ export function HandoffForm({ handoff, canUpdate }: { handoff: AiHandoffSettings
           </div>
 
           {canUpdate ? (
-            <Button type="submit" disabled={isSubmitting || !isDirty}>
-              {isSubmitting ? "Saving..." : "Save changes"}
+            <Button type="submit" disabled={!isDirty} loading={isSubmitting}>
+              Save changes
             </Button>
           ) : null}
         </form>

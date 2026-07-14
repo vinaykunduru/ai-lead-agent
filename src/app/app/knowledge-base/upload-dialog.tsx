@@ -158,8 +158,8 @@ export function UploadDialog({ collections, defaultCollectionId }: Props) {
                 <Input id="upload-file" name="file" type="file" accept=".pdf,.docx" required />
               </div>
               <DialogFooter>
-                <Button type="submit" disabled={pending || !collectionId}>
-                  {pending ? "Uploading..." : "Upload"}
+                <Button type="submit" disabled={!collectionId} loading={pending}>
+                  Upload
                 </Button>
               </DialogFooter>
             </form>
@@ -176,8 +176,8 @@ export function UploadDialog({ collections, defaultCollectionId }: Props) {
                 <Textarea id="upload-text-content" name="content" required rows={8} maxLength={200_000} />
               </div>
               <DialogFooter>
-                <Button type="submit" disabled={pending || !collectionId}>
-                  {pending ? "Saving..." : "Save"}
+                <Button type="submit" disabled={!collectionId} loading={pending}>
+                  Save
                 </Button>
               </DialogFooter>
             </form>
@@ -191,8 +191,8 @@ export function UploadDialog({ collections, defaultCollectionId }: Props) {
                 <p className="text-xs text-muted-foreground">Imports one page only — no crawling.</p>
               </div>
               <DialogFooter>
-                <Button type="submit" disabled={pending || !collectionId}>
-                  {pending ? "Importing..." : "Import"}
+                <Button type="submit" disabled={!collectionId} loading={pending}>
+                  Import
                 </Button>
               </DialogFooter>
             </form>

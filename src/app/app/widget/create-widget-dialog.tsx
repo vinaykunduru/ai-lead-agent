@@ -65,8 +65,8 @@ export function CreateWidgetDialog() {
             <Textarea id="widget-description" name="description" maxLength={500} rows={3} />
           </div>
           <DialogFooter>
-            <Button type="submit" disabled={pending}>
-              {pending ? "Creating..." : "Create widget"}
+            <Button type="submit" loading={pending}>
+              Create widget
             </Button>
           </DialogFooter>
         </form>

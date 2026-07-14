@@ -64,7 +64,7 @@ export function LeadNotes({ leadId, initialNotes, canUpdate }: { leadId: string;
               rows={3}
               maxLength={5000}
             />
-            <Button type="submit" size="sm" disabled={pending}>{pending ? "Saving..." : "Add note"}</Button>
+            <Button type="submit" size="sm" loading={pending}>Add note</Button>
           </form>
         ) : null}
       </CardContent>

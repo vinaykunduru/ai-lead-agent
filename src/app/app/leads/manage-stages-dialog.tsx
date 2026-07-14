@@ -99,8 +99,8 @@ export function ManageStagesDialog({ stages }: { stages: LeadStage[] }) {
           <Button variant="outline" size="sm" onClick={add}>Add stage</Button>
         </div>
         <DialogFooter>
-          <Button onClick={save} disabled={pending}>
-            {pending ? "Saving..." : "Save pipeline"}
+          <Button onClick={save} loading={pending}>
+            Save pipeline
           </Button>
         </DialogFooter>
       </DialogContent>

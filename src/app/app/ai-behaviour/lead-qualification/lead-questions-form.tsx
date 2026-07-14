@@ -225,8 +225,8 @@ export function LeadQuestionsForm({
                 <Plus className="size-4" />
                 Add question
               </Button>
-              <Button type="button" disabled={pending} onClick={save}>
-                {pending ? "Saving..." : "Save changes"}
+              <Button type="button" loading={pending} onClick={save}>
+                Save changes
               </Button>
             </div>
           ) : null}

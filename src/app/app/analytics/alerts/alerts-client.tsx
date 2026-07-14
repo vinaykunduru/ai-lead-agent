@@ -40,13 +40,16 @@ const OPERATOR_LABELS: Record<(typeof ANALYTICS_ALERT_OPERATORS)[number], string
 export function AlertsClient({ initialRules }: { initialRules: AlertStatus[] }) {
   const router = useRouter();
   const [rules, setRules] = useState(initialRules);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   async function toggleEnabled(rule: AlertStatus) {
+    setBusyId(rule.id);
     const res = await fetch(`/api/analytics/alerts/${rule.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ enabled: !rule.enabled }),
     });
+    setBusyId(null);
     if (!res.ok) {
       toast.error("Could not update the alert");
       return;
@@ -56,7 +59,9 @@ export function AlertsClient({ initialRules }: { initialRules: AlertStatus[] }) 
   }
 
   async function remove(ruleId: string) {
+    setBusyId(ruleId);
     const res = await fetch(`/api/analytics/alerts/${ruleId}`, { method: "DELETE" });
+    setBusyId(null);
     if (!res.ok) {
       toast.error("Could not delete the alert");
       return;
@@ -99,8 +104,19 @@ export function AlertsClient({ initialRules }: { initialRules: AlertStatus[] }) 
                   </p>
                 </div>
                 <div className="flex items-center gap-3">
-                  <Switch checked={rule.enabled} onCheckedChange={() => toggleEnabled(rule)} />
-                  <Button variant="destructive" size="sm" onClick={() => remove(rule.id)}>Delete</Button>
+                  <Switch
+                    checked={rule.enabled}
+                    disabled={busyId === rule.id}
+                    onCheckedChange={() => toggleEnabled(rule)}
+                  />
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    loading={busyId === rule.id}
+                    onClick={() => remove(rule.id)}
+                  >
+                    Delete
+                  </Button>
                 </div>
               </CardContent>
             </Card>
@@ -184,7 +200,7 @@ function CreateAlertDialog({ onCreated }: { onCreated: (rule: AlertStatus) => vo
             </div>
           </div>
           <DialogFooter>
-            <Button type="submit" disabled={pending}>{pending ? "Creating..." : "Create alert"}</Button>
+            <Button type="submit" loading={pending}>Create alert</Button>
           </DialogFooter>
         </form>
       </DialogContent>

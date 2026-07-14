@@ -64,8 +64,8 @@ export function CompanyOverviewForm({ company }: { company: Organization }) {
           <p className="text-sm text-destructive">{errors.timezone.message}</p>
         ) : null}
       </div>
-      <Button type="submit" disabled={isSubmitting || !isDirty}>
-        {isSubmitting ? "Saving..." : "Save changes"}
+      <Button type="submit" disabled={!isDirty} loading={isSubmitting}>
+        Save changes
       </Button>
     </form>
   );

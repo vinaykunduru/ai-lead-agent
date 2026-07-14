@@ -81,8 +81,8 @@ export function CreateCompanyDialog() {
             <Input id="timezone" {...register("timezone")} />
           </div>
           <DialogFooter>
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? "Creating..." : "Create company"}
+            <Button type="submit" loading={isSubmitting}>
+              Create company
             </Button>
           </DialogFooter>
         </form>

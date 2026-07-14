@@ -40,6 +40,7 @@ export function CollectionsSidebar({ collections, activeCollectionId, canCreate,
   const [renameTarget, setRenameTarget] = useState<KnowledgeCollection | null>(null);
   const [newName, setNewName] = useState("");
   const [pending, setPending] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   const active = collections.filter((c) => c.status === "active");
   const archived = collections.filter((c) => c.status === "archived");
@@ -81,11 +82,13 @@ export function CollectionsSidebar({ collections, activeCollectionId, canCreate,
   }
 
   async function setStatus(collectionId: string, status: "active" | "archived") {
+    setBusyId(collectionId);
     const res = await fetch(`/api/knowledge/collections/${collectionId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status }),
     });
+    setBusyId(null);
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
       toast.error(body.error ?? "Could not update collection");
@@ -96,7 +99,9 @@ export function CollectionsSidebar({ collections, activeCollectionId, canCreate,
   }
 
   async function softDelete(collectionId: string) {
+    setBusyId(collectionId);
     const res = await fetch(`/api/knowledge/collections/${collectionId}`, { method: "DELETE" });
+    setBusyId(null);
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
       toast.error(body.error ?? "Could not delete collection");
@@ -131,8 +136,8 @@ export function CollectionsSidebar({ collections, activeCollectionId, canCreate,
                   <Input id="new-collection-name" name="name" required maxLength={120} />
                 </div>
                 <DialogFooter>
-                  <Button type="submit" disabled={pending}>
-                    {pending ? "Creating..." : "Create"}
+                  <Button type="submit" loading={pending}>
+                    Create
                   </Button>
                 </DialogFooter>
               </form>
@@ -179,6 +184,7 @@ export function CollectionsSidebar({ collections, activeCollectionId, canCreate,
                 <DropdownMenuContent align="end">
                   {canUpdate ? (
                     <DropdownMenuItem
+                      disabled={busyId === collection.id}
                       onClick={() => {
                         setRenameTarget(collection);
                         setNewName(collection.name);
@@ -188,13 +194,20 @@ export function CollectionsSidebar({ collections, activeCollectionId, canCreate,
                     </DropdownMenuItem>
                   ) : null}
                   {canUpdate ? (
-                    <DropdownMenuItem onClick={() => setStatus(collection.id, "archived")}>
-                      Archive
+                    <DropdownMenuItem
+                      disabled={busyId === collection.id}
+                      onClick={() => setStatus(collection.id, "archived")}
+                    >
+                      {busyId === collection.id ? "Archiving..." : "Archive"}
                     </DropdownMenuItem>
                   ) : null}
                   {canDelete ? (
-                    <DropdownMenuItem variant="destructive" onClick={() => softDelete(collection.id)}>
-                      Delete
+                    <DropdownMenuItem
+                      variant="destructive"
+                      disabled={busyId === collection.id}
+                      onClick={() => softDelete(collection.id)}
+                    >
+                      {busyId === collection.id ? "Deleting..." : "Delete"}
                     </DropdownMenuItem>
                   ) : null}
                 </DropdownMenuContent>
@@ -213,10 +226,11 @@ export function CollectionsSidebar({ collections, activeCollectionId, canCreate,
               {canUpdate ? (
                 <button
                   type="button"
-                  className="text-xs underline"
+                  disabled={busyId === collection.id}
+                  className="text-xs underline disabled:cursor-not-allowed disabled:opacity-50"
                   onClick={() => setStatus(collection.id, "active")}
                 >
-                  Restore
+                  {busyId === collection.id ? "Restoring..." : "Restore"}
                 </button>
               ) : null}
             </div>
@@ -247,8 +261,8 @@ export function CollectionsSidebar({ collections, activeCollectionId, canCreate,
               />
             </div>
             <DialogFooter>
-              <Button type="submit" disabled={pending}>
-                {pending ? "Saving..." : "Save"}
+              <Button type="submit" loading={pending}>
+                Save
               </Button>
             </DialogFooter>
           </form>

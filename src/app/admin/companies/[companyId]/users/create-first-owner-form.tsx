@@ -61,8 +61,8 @@ export function CreateFirstOwnerForm({ organizationId }: { organizationId: strin
               <p className="text-sm text-destructive">{errors.email.message}</p>
             ) : null}
           </div>
-          <Button type="submit" disabled={isSubmitting}>
-            {isSubmitting ? "Sending invite..." : "Send invite"}
+          <Button type="submit" loading={isSubmitting}>
+            Send invite
           </Button>
         </form>
       </CardContent>

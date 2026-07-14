@@ -101,8 +101,8 @@ export function IdentityForm({ profile, canUpdate }: { profile: AiProfile; canUp
             ) : null}
           </div>
           {canUpdate ? (
-            <Button type="submit" disabled={isSubmitting || !isDirty}>
-              {isSubmitting ? "Saving..." : "Save changes"}
+            <Button type="submit" disabled={!isDirty} loading={isSubmitting}>
+              Save changes
             </Button>
           ) : null}
         </form>

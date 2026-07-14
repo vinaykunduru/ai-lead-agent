@@ -81,7 +81,10 @@ export function ExecutiveDashboardClient({
         </div>
       </div>
 
-      <div className={`grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5 ${loading ? "opacity-60" : ""}`}>
+      <div
+        className={`grid grid-cols-2 gap-3 transition-opacity duration-150 sm:grid-cols-3 lg:grid-cols-5 ${loading ? "opacity-60" : ""}`}
+        aria-busy={loading}
+      >
         {orderedCards.map((card) => {
           const meta = CARD_META[card.key];
           const { value, suffix } = meta.format(summary);
@@ -159,7 +162,7 @@ function CustomizeDashboardDialog({
             ))}
         </div>
         <DialogFooter>
-          <Button onClick={save} disabled={pending}>{pending ? "Saving..." : "Save"}</Button>
+          <Button onClick={save} loading={pending}>Save</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
