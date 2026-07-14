@@ -85,9 +85,9 @@ export function DocumentsTable({
   }
 
   return (
-    <div>
-      <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-sm font-medium text-muted-foreground">
+    <div className="overflow-hidden rounded-xl border bg-card shadow-card">
+      <div className="flex items-center justify-between border-b px-4 py-3">
+        <h2 className="text-card-title font-semibold">
           {documents.length} document{documents.length === 1 ? "" : "s"}
         </h2>
         <div className="flex items-center gap-2">
@@ -102,10 +102,12 @@ export function DocumentsTable({
       </div>
 
       {documents.length === 0 ? (
-        <EmptyState
-          title="No documents yet"
-          description="Upload a file, paste text, or import a web page to start training your AI agent."
-        />
+        <div className="p-4">
+          <EmptyState
+            title="No documents yet"
+            description="Upload a file, paste text, or import a web page to start training your AI agent."
+          />
+        </div>
       ) : (
         <Table>
           <TableHeader>

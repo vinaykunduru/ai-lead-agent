@@ -42,8 +42,8 @@ export function LoginForm({ nextPath, notice }: { nextPath: string; notice?: str
       <Image src="/logo.png" alt="Bloom" width={140} height={44} priority className="h-11 w-auto" />
       <Card className="w-full">
         <CardHeader>
-          <CardTitle className="text-2xl font-semibold tracking-tight">Sign in</CardTitle>
-          <CardDescription>Enter your email and password to continue.</CardDescription>
+          <CardTitle className="text-section font-semibold tracking-tight">Sign in</CardTitle>
+          <CardDescription className="text-body">Enter your email and password to continue.</CardDescription>
         </CardHeader>
         <CardContent>
           {notice ? (
@@ -99,8 +99,8 @@ export function LoginForm({ nextPath, notice }: { nextPath: string; notice?: str
                 <span>{formError}</span>
               </div>
             ) : null}
-            <Button type="submit" className="w-full" disabled={isSubmitting}>
-              {isSubmitting ? "Signing in..." : "Sign in"}
+            <Button type="submit" className="w-full" loading={isSubmitting}>
+              Sign in
             </Button>
           </form>
         </CardContent>

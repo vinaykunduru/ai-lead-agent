@@ -50,6 +50,32 @@
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
+
+  /* Typography scale — the semantic hierarchy for this whole app. Every
+     screen should reach for one of these (text-page-title, text-section,
+     etc.) instead of ad hoc text-sm/text-2xl combinations, so the type
+     scale stays a single, editable source of truth. */
+  --text-page-title: 1.75rem; /* 28px */
+  --text-page-title--line-height: 2.25rem;
+  --text-section: 1.25rem; /* 20px */
+  --text-section--line-height: 1.75rem;
+  --text-card-title: 0.875rem; /* 14px */
+  --text-card-title--line-height: 1.25rem;
+  --text-metric: 2.125rem; /* 34px */
+  --text-metric--line-height: 2.5rem;
+  --text-body: 0.9375rem; /* 15px */
+  --text-body--line-height: 1.5rem;
+  --text-caption: 0.8125rem; /* 13px */
+  --text-caption--line-height: 1.125rem;
+  --text-metadata: 0.75rem; /* 12px */
+  --text-metadata--line-height: 1rem;
+
+  /* Shadow scale — deliberately soft/low-opacity (CLAUDE.md: no heavy
+     shadows). shadow-card is the one most components reach for; shadow-
+     popover is for menus/dialogs that float above content. */
+  --shadow-card: 0 1px 2px 0 rgb(0 0 0 / 0.04), 0 1px 3px 0 rgb(0 0 0 / 0.06);
+  --shadow-card-hover: 0 2px 4px 0 rgb(0 0 0 / 0.04), 0 4px 8px 0 rgb(0 0 0 / 0.08);
+  --shadow-popover: 0 4px 6px -1px rgb(0 0 0 / 0.08), 0 10px 15px -3px rgb(0 0 0 / 0.08);
 }
 
 :root {

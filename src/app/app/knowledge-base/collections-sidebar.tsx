@@ -107,9 +107,9 @@ export function CollectionsSidebar({ collections, activeCollectionId, canCreate,
   }
 
   return (
-    <aside className="w-full shrink-0 md:w-56">
-      <div className="mb-2 flex items-center justify-between">
-        <h2 className="text-sm font-medium text-muted-foreground">Collections</h2>
+    <aside className="w-full shrink-0 rounded-xl border bg-card p-3 shadow-card md:w-60">
+      <div className="mb-2 flex items-center justify-between px-1">
+        <h2 className="text-caption font-semibold tracking-wide text-muted-foreground uppercase">Collections</h2>
         {canCreate ? (
           <Dialog open={createOpen} onOpenChange={setCreateOpen}>
             <DialogTrigger render={<Button variant="ghost" size="sm">New</Button>} />
