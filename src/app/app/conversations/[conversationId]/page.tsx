@@ -63,7 +63,7 @@ export default async function ConversationDetailPage({
         }
       />
 
-      <div className="grid grid-cols-1 gap-4 p-6 lg:grid-cols-[2fr_1fr]">
+      <div className="grid grid-cols-1 gap-4 p-6 lg:grid-cols-[minmax(320px,2fr)_minmax(280px,1fr)]">
         <Card>
           <CardHeader>
             <CardTitle className="text-sm font-medium text-muted-foreground">Timeline</CardTitle>

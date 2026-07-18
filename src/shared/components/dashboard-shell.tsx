@@ -221,7 +221,7 @@ export function DashboardShell({
         </div>
         <ProfileFooter userLabel={userLabel} signOutAction={signOutAction} collapsed={collapsed} />
       </aside>
-      <main className="flex-1 overflow-x-hidden">{children}</main>
+      <main className="min-w-0 flex-1 overflow-x-hidden">{children}</main>
     </div>
   );
 }
