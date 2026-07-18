@@ -86,16 +86,16 @@ export default async function AiBehaviourOverviewPage() {
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {cards.map((card) => (
-          <Link key={card.href} href={card.href}>
-            <Card className="h-full transition-colors hover:border-primary/50">
+          <Card key={card.href} interactive className="h-full">
+            <Link href={card.href} className="block h-full focus-visible:outline-none">
               <CardHeader>
                 <CardTitle className="text-sm font-medium">{card.title}</CardTitle>
               </CardHeader>
               <CardContent>
                 <p className="text-sm text-muted-foreground">{card.summary}</p>
               </CardContent>
-            </Card>
-          </Link>
+            </Link>
+          </Card>
         ))}
       </div>
     </div>

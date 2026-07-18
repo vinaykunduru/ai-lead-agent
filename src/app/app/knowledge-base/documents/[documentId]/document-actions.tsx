@@ -74,18 +74,18 @@ export function DocumentActions({ documentId, status, canUpdate, canDelete, canR
   return (
     <div className="flex gap-2">
       {canReprocess && (status === "ready" || status === "failed") ? (
-        <Button variant="outline" size="sm" disabled={pending} onClick={reprocess}>
+        <Button variant="outline" size="sm" loading={pending} onClick={reprocess}>
           Reprocess
         </Button>
       ) : null}
       {canUpdate && status !== "archived" ? (
-        <Button variant="outline" size="sm" disabled={pending} onClick={archive}>
+        <Button variant="outline" size="sm" loading={pending} onClick={archive}>
           Archive
         </Button>
       ) : null}
       {canDelete ? (
         <AlertDialog>
-          <AlertDialogTrigger render={<Button variant="outline" size="sm" disabled={pending}>Delete</Button>} />
+          <AlertDialogTrigger render={<Button variant="outline" size="sm" loading={pending}>Delete</Button>} />
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>Delete this document?</AlertDialogTitle>
@@ -96,7 +96,9 @@ export function DocumentActions({ documentId, status, canUpdate, canDelete, canR
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction onClick={softDelete}>Delete</AlertDialogAction>
+              <AlertDialogAction onClick={softDelete} loading={pending}>
+                Delete
+              </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>

@@ -23,29 +23,31 @@ export default async function CompanyUsersPage({
   }
 
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Email</TableHead>
-          <TableHead>Role</TableHead>
-          <TableHead>Status</TableHead>
-          <TableHead>Joined</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {users.map((user) => (
-          <TableRow key={user.membershipId}>
-            <TableCell className="font-medium">{user.email ?? "—"}</TableCell>
-            <TableCell className="capitalize">{user.role}</TableCell>
-            <TableCell>
-              <MembershipStatusBadge status={user.status} />
-            </TableCell>
-            <TableCell className="text-muted-foreground">
-              {user.createdAt.toLocaleDateString()}
-            </TableCell>
+    <div className="overflow-hidden rounded-xl border bg-card shadow-card">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Email</TableHead>
+            <TableHead>Role</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead>Joined</TableHead>
           </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+        </TableHeader>
+        <TableBody>
+          {users.map((user) => (
+            <TableRow key={user.membershipId}>
+              <TableCell className="font-medium">{user.email ?? "—"}</TableCell>
+              <TableCell className="capitalize">{user.role}</TableCell>
+              <TableCell>
+                <MembershipStatusBadge status={user.status} />
+              </TableCell>
+              <TableCell className="text-muted-foreground">
+                {user.createdAt.toLocaleDateString()}
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
   );
 }

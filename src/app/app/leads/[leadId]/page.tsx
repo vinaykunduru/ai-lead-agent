@@ -58,7 +58,7 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ lea
         description={[lead.company, lead.email, lead.phone].filter(Boolean).join(" · ") || undefined}
       />
 
-      <div className="grid grid-cols-1 gap-4 p-6 lg:grid-cols-[2fr_1fr]">
+      <div className="grid grid-cols-1 gap-4 p-6 lg:grid-cols-[minmax(320px,2fr)_minmax(280px,1fr)]">
         <div className="space-y-4">
           <LeadAiPanel lead={lead} canUpdate={permissions.canUpdate} />
           <LeadConversationPanel detail={conversationDetail} />

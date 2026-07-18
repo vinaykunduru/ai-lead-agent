@@ -37,7 +37,7 @@ export function CompanyStatusActions({ company }: { company: Organization }) {
   return (
     <div className="flex gap-2">
       {company.status !== "active" ? (
-        <Button variant="outline" size="sm" disabled={pending} onClick={() => setStatus("active")}>
+        <Button variant="outline" size="sm" loading={pending} onClick={() => setStatus("active")}>
           Activate
         </Button>
       ) : null}
@@ -45,7 +45,7 @@ export function CompanyStatusActions({ company }: { company: Organization }) {
         <AlertDialog>
           <AlertDialogTrigger
             render={
-              <Button variant="outline" size="sm" disabled={pending}>
+              <Button variant="outline" size="sm" loading={pending}>
                 Suspend
               </Button>
             }
@@ -60,7 +60,9 @@ export function CompanyStatusActions({ company }: { company: Organization }) {
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction onClick={() => setStatus("suspended")}>Suspend</AlertDialogAction>
+              <AlertDialogAction onClick={() => setStatus("suspended")} loading={pending}>
+                Suspend
+              </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>

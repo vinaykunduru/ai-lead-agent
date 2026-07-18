@@ -87,7 +87,9 @@ export function GeneralForm({
   }
 
   async function deleteWidget() {
+    setStatusPending(true);
     const res = await fetch(`/api/widgets/${widget.id}`, { method: "DELETE" });
+    setStatusPending(false);
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
       toast.error(body.error ?? "Could not delete widget");
@@ -139,12 +141,12 @@ export function GeneralForm({
           </CardHeader>
           <CardContent className="flex flex-wrap gap-2">
             {canPublish && widget.status !== "active" && widget.status !== "archived" ? (
-              <Button variant="outline" disabled={statusPending} onClick={() => setStatus("active")}>
+              <Button variant="outline" loading={statusPending} onClick={() => setStatus("active")}>
                 Enable widget
               </Button>
             ) : null}
             {canPublish && widget.status === "active" ? (
-              <Button variant="outline" disabled={statusPending} onClick={() => setStatus("disabled")}>
+              <Button variant="outline" loading={statusPending} onClick={() => setStatus("disabled")}>
                 Disable widget
               </Button>
             ) : null}
@@ -161,7 +163,9 @@ export function GeneralForm({
                   </AlertDialogHeader>
                   <AlertDialogFooter>
                     <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction onClick={deleteWidget}>Delete</AlertDialogAction>
+                    <AlertDialogAction onClick={deleteWidget} loading={statusPending}>
+                      Delete
+                    </AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>
               </AlertDialog>

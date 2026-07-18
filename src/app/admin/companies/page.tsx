@@ -28,39 +28,42 @@ export default async function CompaniesPage() {
           <EmptyState
             title="No companies yet"
             description="Create the first company to get started."
+            action={<CreateCompanyDialog />}
           />
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Slug</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Created</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {companies.map((company) => (
-                <TableRow key={company.id}>
-                  <TableCell>
-                    <Link
-                      href={`/admin/companies/${company.id}`}
-                      className="font-medium hover:underline"
-                    >
-                      {company.name}
-                    </Link>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">{company.slug}</TableCell>
-                  <TableCell>
-                    <OrganizationStatusBadge status={company.status} />
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {company.createdAt.toLocaleDateString()}
-                  </TableCell>
+          <div className="overflow-hidden rounded-xl border bg-card shadow-card">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Slug</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Created</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {companies.map((company) => (
+                  <TableRow key={company.id}>
+                    <TableCell>
+                      <Link
+                        href={`/admin/companies/${company.id}`}
+                        className="font-medium hover:underline"
+                      >
+                        {company.name}
+                      </Link>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{company.slug}</TableCell>
+                    <TableCell>
+                      <OrganizationStatusBadge status={company.status} />
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {company.createdAt.toLocaleDateString()}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
         )}
       </div>
     </div>

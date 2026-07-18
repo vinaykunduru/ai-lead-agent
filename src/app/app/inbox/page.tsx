@@ -34,47 +34,49 @@ export default async function InboxPage({
         {conversations.length === 0 ? (
           <EmptyState title="Nothing here" description="No conversations match this view right now." />
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Widget</TableHead>
-                <TableHead>Owner</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Assigned</TableHead>
-                <TableHead>Last activity</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {conversations.map((conversation) => {
-                const unread = !conversation.lastReadAt || conversation.lastActivityAt > conversation.lastReadAt;
-                return (
-                  <TableRow key={conversation.id}>
-                    <TableCell>
-                      <Link href={`/app/inbox/${conversation.id}`} className="flex items-center gap-2 font-medium hover:underline">
-                        {unread ? <span className="size-1.5 shrink-0 rounded-full bg-primary" /> : null}
-                        {conversation.widgetName}
-                      </Link>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={conversation.owner === "human" ? "secondary" : "outline"} className="capitalize">
-                        {conversation.owner}
-                        {conversation.takeoverReason === "automatic" ? " · escalated" : ""}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={conversation.status === "active" ? "secondary" : "outline"} className="capitalize">
-                        {conversation.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {conversation.assignedUserId ? (emailByUserId.get(conversation.assignedUserId) ?? "—") : "Unassigned"}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">{conversation.lastActivityAt.toLocaleString()}</TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
+          <div className="overflow-hidden rounded-xl border bg-card shadow-card">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Widget</TableHead>
+                  <TableHead>Owner</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Assigned</TableHead>
+                  <TableHead>Last activity</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {conversations.map((conversation) => {
+                  const unread = !conversation.lastReadAt || conversation.lastActivityAt > conversation.lastReadAt;
+                  return (
+                    <TableRow key={conversation.id}>
+                      <TableCell>
+                        <Link href={`/app/inbox/${conversation.id}`} className="flex items-center gap-2 font-medium hover:underline">
+                          {unread ? <span className="size-1.5 shrink-0 rounded-full bg-primary" /> : null}
+                          {conversation.widgetName}
+                        </Link>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={conversation.owner === "human" ? "secondary" : "outline"} className="capitalize">
+                          {conversation.owner}
+                          {conversation.takeoverReason === "automatic" ? " · escalated" : ""}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={conversation.status === "active" ? "secondary" : "outline"} className="capitalize">
+                          {conversation.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {conversation.assignedUserId ? (emailByUserId.get(conversation.assignedUserId) ?? "—") : "Unassigned"}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">{conversation.lastActivityAt.toLocaleString()}</TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
         )}
       </div>
     </div>

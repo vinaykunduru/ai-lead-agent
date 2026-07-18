@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -28,9 +29,12 @@ export function KeysPanel({
   canRotate: boolean;
 }) {
   const router = useRouter();
+  const [pending, setPending] = useState(false);
 
   async function rotate() {
+    setPending(true);
     const res = await fetch(`/api/widgets/${widgetId}/keys/rotate`, { method: "POST" });
+    setPending(false);
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
       toast.error(body.error ?? "Could not rotate key");
@@ -63,7 +67,9 @@ export function KeysPanel({
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction onClick={rotate}>Rotate</AlertDialogAction>
+                <AlertDialogAction onClick={rotate} loading={pending}>
+                  Rotate
+                </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>

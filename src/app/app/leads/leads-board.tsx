@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -149,39 +150,50 @@ export function LeadsBoard({ initialLeads, stages, teamMembers, canCreate, canUp
           action={canCreate ? <CreateLeadDialog stages={stages} /> : undefined}
         />
       ) : view === "table" ? (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Lead</TableHead>
-              <TableHead>Stage</TableHead>
-              <TableHead>Priority</TableHead>
-              <TableHead>Score</TableHead>
-              <TableHead>Assigned</TableHead>
-              <TableHead>Last activity</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {leads.map((lead) => (
-              <TableRow key={lead.id}>
-                <TableCell>
-                  <Link href={`/app/leads/${lead.id}`} className="font-medium hover:underline">
-                    {lead.name ?? lead.email ?? lead.phone ?? "Unnamed lead"}
-                  </Link>
-                  {lead.company ? <p className="text-xs text-muted-foreground">{lead.company}</p> : null}
-                </TableCell>
-                <TableCell className="text-muted-foreground">{stageById.get(lead.stageId)?.name ?? "—"}</TableCell>
-                <TableCell><PriorityBadge priority={lead.priority} /></TableCell>
-                <TableCell><ScoreBadge score={lead.score} /></TableCell>
-                <TableCell className="text-muted-foreground">
-                  {lead.assignedUserId ? (emailByUserId.get(lead.assignedUserId) ?? "—") : "Unassigned"}
-                </TableCell>
-                <TableCell className="text-muted-foreground">{lead.lastActivityAt.toLocaleString()}</TableCell>
+        <div
+          className={cn(
+            "overflow-hidden rounded-xl border bg-card shadow-card transition-opacity duration-150",
+            loading && "opacity-60",
+          )}
+          aria-busy={loading}
+        >
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Lead</TableHead>
+                <TableHead>Stage</TableHead>
+                <TableHead>Priority</TableHead>
+                <TableHead>Score</TableHead>
+                <TableHead>Assigned</TableHead>
+                <TableHead>Last activity</TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {leads.map((lead) => (
+                <TableRow key={lead.id}>
+                  <TableCell>
+                    <Link href={`/app/leads/${lead.id}`} className="font-medium hover:underline">
+                      {lead.name ?? lead.email ?? lead.phone ?? "Unnamed lead"}
+                    </Link>
+                    {lead.company ? <p className="text-xs text-muted-foreground">{lead.company}</p> : null}
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">{stageById.get(lead.stageId)?.name ?? "—"}</TableCell>
+                  <TableCell><PriorityBadge priority={lead.priority} /></TableCell>
+                  <TableCell><ScoreBadge score={lead.score} /></TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {lead.assignedUserId ? (emailByUserId.get(lead.assignedUserId) ?? "—") : "Unassigned"}
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">{lead.lastActivityAt.toLocaleString()}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
       ) : (
-        <div className="flex gap-3 overflow-x-auto pb-2">
+        <div
+          className={cn("flex gap-3 overflow-x-auto pb-2 transition-opacity duration-150", loading && "opacity-60")}
+          aria-busy={loading}
+        >
           {stages.map((stage) => (
             <Card key={stage.id} className="w-72 shrink-0" size="sm">
               <CardHeader>
