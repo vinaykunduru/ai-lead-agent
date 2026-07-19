@@ -1,12 +1,24 @@
 import Link from "next/link";
+import { MessagesSquare } from "lucide-react";
 import { PageHeader } from "@/shared/components/page-header";
 import { EmptyState } from "@/shared/components/empty-state";
+import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { requireCompanySession } from "@/lib/auth/session";
+import { can } from "@/modules/permissions";
 import { listConversations } from "@/modules/conversation/inspector-service";
+import { listWidgets } from "@/modules/widget/widgets-service";
 
 export default async function ConversationsPage() {
-  const conversations = await listConversations();
+  const session = await requireCompanySession();
+  const canViewWidgets = can(session, "widget.view");
+
+  const [conversations, widgets] = await Promise.all([
+    listConversations(),
+    canViewWidgets ? listWidgets() : Promise.resolve([]),
+  ]);
+  const hasActiveWidget = widgets.some((widget) => widget.status === "active");
 
   return (
     <div>
@@ -17,8 +29,18 @@ export default async function ConversationsPage() {
       <div className="p-6">
         {conversations.length === 0 ? (
           <EmptyState
+            icon={MessagesSquare}
             title="No conversations yet"
-            description="Conversations appear here once a visitor sends a message through one of your widgets."
+            description={
+              hasActiveWidget
+                ? "Every conversation your widget has with a visitor will show up here in real time — nothing to do but wait for the first one."
+                : "Conversations appear here once a visitor sends a message through your widget. Publish a widget to start receiving them."
+            }
+            action={
+              !hasActiveWidget && canViewWidgets ? (
+                <Button size="sm" render={<Link href="/app/widget">Go to Widget</Link>} />
+              ) : undefined
+            }
           />
         ) : (
           <div className="overflow-hidden rounded-xl border bg-card shadow-card">

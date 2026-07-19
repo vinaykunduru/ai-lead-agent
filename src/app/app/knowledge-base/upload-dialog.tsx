@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { FileText, Globe, Type, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -53,7 +55,7 @@ export function UploadDialog({ collections, defaultCollectionId }: Props) {
       toast.error(json.error ?? "Upload failed");
       return;
     }
-    toast.success("Document uploaded — processing will start shortly");
+    toast.success("Uploaded — reading and indexing it now, usually done within a minute");
     setOpen(false);
     router.refresh();
   }
@@ -77,7 +79,7 @@ export function UploadDialog({ collections, defaultCollectionId }: Props) {
       toast.error(json.error ?? "Could not save text");
       return;
     }
-    toast.success("Document created — processing will start shortly");
+    toast.success("Saved — indexing it now, usually done within a minute");
     setOpen(false);
     router.refresh();
   }
@@ -100,7 +102,7 @@ export function UploadDialog({ collections, defaultCollectionId }: Props) {
       toast.error(json.error ?? "Could not import this page");
       return;
     }
-    toast.success("Page queued for import");
+    toast.success("Importing that page now, usually done within a minute");
     setOpen(false);
     router.refresh();
   }
@@ -111,6 +113,10 @@ export function UploadDialog({ collections, defaultCollectionId }: Props) {
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Add to knowledge base</DialogTitle>
+          <DialogDescription>
+            Your AI only answers from what you add here — it never guesses. The more it has, the more it
+            can help.
+          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-2">
@@ -133,18 +139,24 @@ export function UploadDialog({ collections, defaultCollectionId }: Props) {
 
         <Tabs value={mode} onValueChange={(v) => setMode(v as Mode)}>
           <TabsList className="w-full">
-            <TabsTrigger value="file" className="flex-1">
+            <TabsTrigger value="file" className="flex-1 gap-1.5">
+              <FileText className="size-3.5" aria-hidden="true" />
               File
             </TabsTrigger>
-            <TabsTrigger value="text" className="flex-1">
+            <TabsTrigger value="text" className="flex-1 gap-1.5">
+              <Type className="size-3.5" aria-hidden="true" />
               Text
             </TabsTrigger>
-            <TabsTrigger value="website" className="flex-1">
+            <TabsTrigger value="website" className="flex-1 gap-1.5">
+              <Globe className="size-3.5" aria-hidden="true" />
               Website
             </TabsTrigger>
           </TabsList>
 
           <TabsContent value="file">
+            <p className="mb-3 text-caption text-muted-foreground">
+              Good for brochures, spec sheets, FAQs, or policy documents you already have written down.
+            </p>
             <form
               action={submitFile}
               className="space-y-4"
@@ -157,7 +169,11 @@ export function UploadDialog({ collections, defaultCollectionId }: Props) {
                 <Label htmlFor="upload-file">PDF or DOCX (max 20MB)</Label>
                 <Input id="upload-file" name="file" type="file" accept=".pdf,.docx" required />
               </div>
-              <DialogFooter>
+              <DialogFooter className="items-center sm:justify-between">
+                <span className="flex items-center gap-1.5 text-caption text-muted-foreground">
+                  <Clock className="size-3.5" aria-hidden="true" />
+                  Usually ready in under a minute
+                </span>
                 <Button type="submit" disabled={!collectionId} loading={pending}>
                   Upload
                 </Button>
@@ -166,6 +182,9 @@ export function UploadDialog({ collections, defaultCollectionId }: Props) {
           </TabsContent>
 
           <TabsContent value="text">
+            <p className="mb-3 text-caption text-muted-foreground">
+              Good for quick FAQs, pricing, or anything easier to paste than to upload as a file.
+            </p>
             <form action={submitText} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="upload-text-title">Title</Label>
@@ -175,7 +194,11 @@ export function UploadDialog({ collections, defaultCollectionId }: Props) {
                 <Label htmlFor="upload-text-content">Content</Label>
                 <Textarea id="upload-text-content" name="content" required rows={8} maxLength={200_000} />
               </div>
-              <DialogFooter>
+              <DialogFooter className="items-center sm:justify-between">
+                <span className="flex items-center gap-1.5 text-caption text-muted-foreground">
+                  <Clock className="size-3.5" aria-hidden="true" />
+                  Usually ready in under a minute
+                </span>
                 <Button type="submit" disabled={!collectionId} loading={pending}>
                   Save
                 </Button>
@@ -184,13 +207,20 @@ export function UploadDialog({ collections, defaultCollectionId }: Props) {
           </TabsContent>
 
           <TabsContent value="website">
+            <p className="mb-3 text-caption text-muted-foreground">
+              Good for your About, FAQ, or Pricing page. Imports one page only — no crawling, so add each
+              page you want separately.
+            </p>
             <form action={submitWebsite} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="upload-website-url">Page URL</Label>
                 <Input id="upload-website-url" name="url" type="url" placeholder="https://example.com/about" required />
-                <p className="text-xs text-muted-foreground">Imports one page only — no crawling.</p>
               </div>
-              <DialogFooter>
+              <DialogFooter className="items-center sm:justify-between">
+                <span className="flex items-center gap-1.5 text-caption text-muted-foreground">
+                  <Clock className="size-3.5" aria-hidden="true" />
+                  Usually ready in under a minute
+                </span>
                 <Button type="submit" disabled={!collectionId} loading={pending}>
                   Import
                 </Button>

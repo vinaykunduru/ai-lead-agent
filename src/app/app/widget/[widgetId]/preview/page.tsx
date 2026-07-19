@@ -1,7 +1,8 @@
+import Link from "next/link";
+import { notFound } from "next/navigation";
 import { getWidget } from "@/modules/widget/widgets-service";
 import { getWidgetTheme } from "@/modules/widget/theme-service";
 import { getWidgetSettings } from "@/modules/widget/settings-service";
-import { notFound } from "next/navigation";
 import { WidgetPreview } from "./widget-preview";
 
 export default async function WidgetPreviewPage({
@@ -19,7 +20,10 @@ export default async function WidgetPreviewPage({
     <div className="p-6">
       <p className="mb-4 max-w-2xl text-sm text-muted-foreground">
         Preview only — reflects your saved Appearance and Behaviour settings. It uses mocked content and
-        never connects to an AI provider.
+        never connects to an AI provider. Happy with how it looks?{" "}
+        <Link href={`/app/widget/${widgetId}/installation`} className="font-medium text-primary hover:underline">
+          Get the install snippet →
+        </Link>
       </p>
       <WidgetPreview widget={widget} theme={theme} settings={settings} />
     </div>

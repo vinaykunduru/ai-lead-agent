@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { z } from "zod";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,12 +13,9 @@ import {
 } from "@/modules/knowledge/documents-service";
 import { listCollections } from "@/modules/knowledge/collections-service";
 import { listResourceAuditLogs } from "@/modules/audit/service";
-import {
-  DocumentStatusBadge,
-  DocumentTypeBadge,
-  EmbeddingStatusBadge,
-} from "../../status-badges";
+import { DocumentTypeBadge } from "../../status-badges";
 import { DocumentActions } from "./document-actions";
+import { ProcessingStatusCard } from "./processing-status-card";
 
 async function resolveUploaderEmail(userId: string | null): Promise<string | null> {
   if (!userId) return null;
@@ -59,6 +55,7 @@ export default async function DocumentDetailsPage({
     canDelete: can(session, "knowledge.delete"),
     canReprocess: can(session, "knowledge.reprocess"),
   };
+  const canSearch = can(session, "knowledge.search");
 
   return (
     <div>
@@ -106,28 +103,18 @@ export default async function DocumentDetailsPage({
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium text-muted-foreground">Processing status</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2 text-sm">
-            <Row label="Status" value={<DocumentStatusBadge status={document.status} />} />
-            <Row label="Embedding status" value={<EmbeddingStatusBadge status={document.embeddingStatus} />} />
-            <Row label="Chunk count" value={document.chunkCount} />
-            <Row label="Token count" value={document.tokenCount} />
-            {document.errorMessage ? (
-              <Row label="Error" value={<span className="text-destructive">{document.errorMessage}</span>} />
-            ) : null}
-            <div className="pt-2">
-              <Link
-                href={`/app/knowledge-base/documents/${document.id}/chunks`}
-                className="text-sm text-primary hover:underline"
-              >
-                View {chunks.length} chunk{chunks.length === 1 ? "" : "s"} →
-              </Link>
-            </div>
-          </CardContent>
-        </Card>
+        <ProcessingStatusCard
+          documentId={document.id}
+          chunkCount={chunks.length}
+          canSearch={canSearch}
+          initial={{
+            status: document.status,
+            embeddingStatus: document.embeddingStatus,
+            chunkCount: document.chunkCount,
+            tokenCount: document.tokenCount,
+            errorMessage: document.errorMessage,
+          }}
+        />
 
         <Card>
           <CardHeader>

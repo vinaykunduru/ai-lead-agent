@@ -1,6 +1,8 @@
 import Link from "next/link";
+import { Inbox as InboxIcon, ListFilter } from "lucide-react";
 import { PageHeader } from "@/shared/components/page-header";
 import { EmptyState } from "@/shared/components/empty-state";
+import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { requireCompanySession } from "@/lib/auth/session";
@@ -32,7 +34,22 @@ export default async function InboxPage({
       <InboxTabs activeView={query.view} />
       <div className="p-6">
         {conversations.length === 0 ? (
-          <EmptyState title="Nothing here" description="No conversations match this view right now." />
+          query.view === "all" ? (
+            <EmptyState
+              icon={InboxIcon}
+              title="Your inbox is empty"
+              description="Conversations land here when the AI needs a hand — either a visitor asks for a person, or your escalation settings hand it over automatically. Nothing to do until then."
+            />
+          ) : (
+            <EmptyState
+              icon={ListFilter}
+              title="No conversations in this view"
+              description="Nothing matches this filter right now. Switch back to All to see every conversation."
+              action={
+                <Button variant="outline" size="sm" render={<Link href="/app/inbox">View all</Link>} />
+              }
+            />
+          )
         ) : (
           <div className="overflow-hidden rounded-xl border bg-card shadow-card">
             <Table>

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { MoreHorizontal } from "lucide-react";
+import { MoreHorizontal, MonitorSmartphone } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -72,8 +72,9 @@ export function WidgetsTable({ widgets, canCreate, canDelete, canPublish }: Prop
 
       {widgets.length === 0 ? (
         <EmptyState
+          icon={MonitorSmartphone}
           title="No widgets yet"
-          description="Create a widget to get an installation snippet for your website."
+          description="Create a widget to get a two-line install snippet for your website — you can customize its look and behavior after."
           action={canCreate ? <CreateWidgetDialog /> : undefined}
         />
       ) : (

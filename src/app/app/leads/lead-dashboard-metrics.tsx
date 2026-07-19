@@ -1,4 +1,4 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { StatTile } from "@/app/app/analytics/charts/stat-tile";
 import type { LeadDashboardMetrics } from "@/modules/leads/dashboard-service";
 
 const METRIC_LABELS: { key: keyof LeadDashboardMetrics; label: string; suffix?: string }[] = [
@@ -17,17 +17,7 @@ export function LeadDashboardMetricsGrid({ metrics }: { metrics: LeadDashboardMe
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
       {METRIC_LABELS.map(({ key, label, suffix }) => (
-        <Card key={key} size="sm">
-          <CardHeader>
-            <CardTitle className="text-xs font-normal text-muted-foreground">{label}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-semibold tabular-nums">
-              {metrics[key]}
-              {suffix ?? ""}
-            </p>
-          </CardContent>
-        </Card>
+        <StatTile key={key} label={label} value={metrics[key]} suffix={suffix} />
       ))}
     </div>
   );

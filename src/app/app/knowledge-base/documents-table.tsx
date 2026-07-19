@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { MoreHorizontal, RefreshCw } from "lucide-react";
+import { MoreHorizontal, RefreshCw, BookOpen } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -104,8 +104,14 @@ export function DocumentsTable({
       {documents.length === 0 ? (
         <div className="p-4">
           <EmptyState
-            title="No documents yet"
-            description="Upload a file, paste text, or import a web page to start training your AI agent."
+            icon={BookOpen}
+            title="Your AI doesn't know anything yet"
+            description="Upload a PDF or Word doc, paste text, or import a web page — your AI will only answer from what you add here."
+            action={
+              canCreate ? (
+                <UploadDialog collections={collections} defaultCollectionId={activeCollectionId} />
+              ) : undefined
+            }
           />
         </div>
       ) : (

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
+import { Users, FilterX } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -39,6 +40,18 @@ export function LeadsBoard({ initialLeads, stages, teamMembers, canCreate, canUp
 
   const emailByUserId = useMemo(() => new Map(teamMembers.map((m) => [m.userId, m.email])), [teamMembers]);
   const stageById = useMemo(() => new Map(stages.map((s) => [s.id, s])), [stages]);
+  // Captured once, from the unfiltered initial load — tells the empty state
+  // whether this org has never had a lead vs. the current filters just don't
+  // match anything, since those need very different guidance.
+  const [hasAnyLeadsEver] = useState(initialLeads.length > 0);
+  const hasActiveFilters = Boolean(q.trim()) || stageId !== ALL || priority !== ALL || assignedUserId !== ALL;
+
+  function clearFilters() {
+    setQ("");
+    setStageId(ALL);
+    setPriority(ALL);
+    setAssignedUserId(ALL);
+  }
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -144,11 +157,25 @@ export function LeadsBoard({ initialLeads, stages, teamMembers, canCreate, canUp
       </div>
 
       {leads.length === 0 && !loading ? (
-        <EmptyState
-          title="No leads match these filters"
-          description="Leads appear here automatically from widget conversations, or you can add one manually."
-          action={canCreate ? <CreateLeadDialog stages={stages} /> : undefined}
-        />
+        hasActiveFilters ? (
+          <EmptyState
+            icon={FilterX}
+            title="No leads match these filters"
+            description="Try a different search term, or clear the filters to see every lead."
+            action={
+              <Button variant="outline" size="sm" onClick={clearFilters}>
+                Clear filters
+              </Button>
+            }
+          />
+        ) : (
+          <EmptyState
+            icon={Users}
+            title={hasAnyLeadsEver ? "No leads yet" : "Your first lead will show up here"}
+            description="Leads are captured automatically once your AI widget starts qualifying visitors — or add one manually to test the pipeline now."
+            action={canCreate ? <CreateLeadDialog stages={stages} /> : undefined}
+          />
+        )
       ) : view === "table" ? (
         <div
           className={cn(
