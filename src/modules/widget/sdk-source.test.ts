@@ -372,4 +372,203 @@ describe("WIDGET_SDK_SOURCE", () => {
       expect(clickHandlers.length).toBeGreaterThanOrEqual(3);
     });
   });
+
+  describe("conversation feel — sending state", () => {
+    it("disables both the input and the send button for the whole send, and re-enables both when it resolves", () => {
+      expect(WIDGET_SDK_SOURCE).toContain("function setSending(elements, sending)");
+      const fn = WIDGET_SDK_SOURCE.match(/function setSending\(elements, sending\) \{([\s\S]*?)\n  \}/);
+      expect(fn).not.toBeNull();
+      expect(fn![1]).toContain("elements.sendButton.disabled = sending;");
+      expect(fn![1]).toContain("elements.input.disabled = sending;");
+    });
+
+    it("clears the input immediately on send but restores it if the send truly fails", () => {
+      const sendMessageStart = WIDGET_SDK_SOURCE.indexOf("function sendMessage(text, elements, config)");
+      const clearIndex = WIDGET_SDK_SOURCE.indexOf("elements.input.value = \"\";", sendMessageStart);
+      expect(clearIndex).toBeGreaterThan(sendMessageStart);
+
+      const failureNoteIndex = WIDGET_SDK_SOURCE.indexOf("true send failure", sendMessageStart);
+      const restoreValueIndex = WIDGET_SDK_SOURCE.indexOf("elements.input.value = trimmed;", failureNoteIndex);
+      const restoreDraftIndex = WIDGET_SDK_SOURCE.indexOf(
+        "saveSession(config, { draft: trimmed, pendingSince: null });",
+        failureNoteIndex,
+      );
+      expect(failureNoteIndex).toBeGreaterThan(sendMessageStart);
+      expect(restoreValueIndex).toBeGreaterThan(failureNoteIndex);
+      expect(restoreDraftIndex).toBeGreaterThan(restoreValueIndex);
+    });
+
+    it("never restores input for a mid-stream SSE error — the message was already recorded server-side by then", () => {
+      // Regression: only the network/HTTP-level failure (the outer .catch)
+      // should put text back in the box. A message that reached the server
+      // and only failed to generate a reply must not be retyped, or a
+      // retry would duplicate the visitor's own message.
+      const errorBranch = WIDGET_SDK_SOURCE.match(/event\.type === "error"\) \{([\s\S]*?)\} else if \(event\.type === "done"\)/);
+      expect(errorBranch).not.toBeNull();
+      expect(errorBranch![1]).not.toContain("elements.input.value");
+    });
+
+    it("prevents duplicate sends via the existing state.sending guard (unchanged)", () => {
+      expect(WIDGET_SDK_SOURCE).toContain("if (!trimmed || state.sending) return;");
+    });
+
+    it("shows the sending state immediately even for a coordinated first message that's still waiting on another tab", () => {
+      const fn = WIDGET_SDK_SOURCE.match(
+        /function sendMessageCoordinated\(text, elements, config\) \{([\s\S]*?)\n  \}/,
+      );
+      expect(fn).not.toBeNull();
+      const setSendingIndex = fn![1].indexOf("setSending(elements, true);");
+      // The .request( call specifically — not the earlier feature-detect
+      // guard at the top of the function, which also mentions
+      // window.navigator.locks in its condition.
+      const lockRequestIndex = fn![1].indexOf(".request(");
+      expect(setSendingIndex).toBeGreaterThan(-1);
+      expect(setSendingIndex).toBeLessThan(lockRequestIndex);
+    });
+  });
+
+  describe("conversation feel — thinking indicator", () => {
+    it("shows animated dots (real DOM nodes) instead of a static CSS ::after ellipsis", () => {
+      expect(WIDGET_SDK_SOURCE).toContain("function createTypingDots()");
+      expect(WIDGET_SDK_SOURCE).not.toContain("::after { content: '...'; }");
+      expect(WIDGET_SDK_SOURCE).toContain("ai-widget-typing-dots");
+    });
+
+    it("is inserted for both a live send and a resumed pending response", () => {
+      const sendMessageStart = WIDGET_SDK_SOURCE.indexOf("function sendMessage(text, elements, config)");
+      const sendMessageEnd = WIDGET_SDK_SOURCE.indexOf("function sendMessageCoordinated");
+      const sendMessageBody = WIDGET_SDK_SOURCE.slice(sendMessageStart, sendMessageEnd);
+      expect(sendMessageBody).toContain("createTypingDots()");
+
+      const resumeFn = WIDGET_SDK_SOURCE.match(
+        /function maybeResumePendingResponse\(elements, config, pendingSince\) \{([\s\S]*?)\n  \}/,
+      );
+      expect(resumeFn).not.toBeNull();
+      expect(resumeFn![1]).toContain("createTypingDots()");
+    });
+
+    it("announces thinking status via the shared live region using the org's own configured name, never a hardcoded brand", () => {
+      expect(WIDGET_SDK_SOURCE).not.toContain("Bloom AI");
+      expect(WIDGET_SDK_SOURCE).toContain('announce(elements, (config.name || "The assistant") + " is thinking");');
+    });
+
+    it("the dots are removed the same way everything else in the bubble is — no separate teardown path", () => {
+      // renderAssistantText already clears every child of textEl on its
+      // first line; since the dots are just another child, no bespoke
+      // "remove the dots" code should exist anywhere.
+      expect(WIDGET_SDK_SOURCE).not.toContain("removeTypingDots");
+      expect(WIDGET_SDK_SOURCE).toContain("while (textEl.firstChild) textEl.removeChild(textEl.firstChild);");
+    });
+  });
+
+  describe("conversation feel — streaming cursor", () => {
+    it("is appended after every token and removed when generation completes", () => {
+      expect(WIDGET_SDK_SOURCE).toContain("function appendCursor(textEl)");
+      expect(WIDGET_SDK_SOURCE).toContain("function removeCursor(textEl)");
+
+      const tokenBranch = WIDGET_SDK_SOURCE.match(/event\.type === "token"\) \{([\s\S]*?)\} else if \(event\.type === "handoff"\)/);
+      expect(tokenBranch).not.toBeNull();
+      expect(tokenBranch![1]).toContain("appendCursor(assistant.textEl);");
+
+      const doneBranch = WIDGET_SDK_SOURCE.match(/event\.type === "done"\) \{([\s\S]*?)\}\n\s*\}\);/);
+      expect(doneBranch).not.toBeNull();
+      expect(doneBranch![1]).toContain("removeCursor(assistant.textEl);");
+    });
+
+    it("a complete non-streamed message (handoff) never gets a lingering cursor", () => {
+      const handoffBranch = WIDGET_SDK_SOURCE.match(/event\.type === "handoff"\) \{([\s\S]*?)\} else if \(event\.type === "error"\)/);
+      expect(handoffBranch).not.toBeNull();
+      expect(handoffBranch![1]).not.toContain("appendCursor");
+    });
+  });
+
+  describe("conversation feel — message entrance animation", () => {
+    it("every bubble gets a subtle, reduced-motion-aware entrance animation via CSS alone (no JS per-message work)", () => {
+      expect(WIDGET_SDK_SOURCE).toContain("animation: ai-widget-bubble-in 0.25s ease-out;");
+      expect(WIDGET_SDK_SOURCE).toContain("@keyframes ai-widget-bubble-in");
+      expect(WIDGET_SDK_SOURCE).toContain("prefers-reduced-motion: reduce");
+      expect(WIDGET_SDK_SOURCE).toContain(".ai-widget-bubble { animation: none; }");
+    });
+
+    it("only uses transform/opacity for every new animation — no layout-affecting properties", () => {
+      const keyframeBlocks = WIDGET_SDK_SOURCE.match(/@keyframes ai-widget-[a-z-]+ \{[^}]*\{[^}]*\}[^}]*\}/g) || [];
+      expect(keyframeBlocks.length).toBeGreaterThanOrEqual(4);
+      for (const block of keyframeBlocks) {
+        expect(block).not.toMatch(/\b(width|height|margin|padding|top|left|right|bottom)\s*:/);
+      }
+    });
+  });
+
+  describe("conversation feel — button states", () => {
+    it("has distinct hover, pressed, sending, and error states, all reduced-motion aware", () => {
+      expect(WIDGET_SDK_SOURCE).toContain(".ai-widget-send:hover:not(:disabled)");
+      expect(WIDGET_SDK_SOURCE).toContain(".ai-widget-send:active:not(:disabled)");
+      expect(WIDGET_SDK_SOURCE).toContain(".ai-widget-send.sending");
+      expect(WIDGET_SDK_SOURCE).toContain(".ai-widget-send.error");
+      expect(WIDGET_SDK_SOURCE).toContain(".ai-widget-send.sending .ai-widget-send-spinner { animation: none; }");
+    });
+
+    it("the spinner reserves its space at all times so toggling it never shifts the Send label (no layout shift)", () => {
+      const spinnerRule = WIDGET_SDK_SOURCE.match(/\.ai-widget-send-spinner \{([\s\S]*?)\}/);
+      expect(spinnerRule).not.toBeNull();
+      expect(spinnerRule![1]).toContain("opacity: 0;");
+      expect(spinnerRule![1]).not.toContain("display: none");
+    });
+
+    it("flashes the error state without ever disabling retry", () => {
+      expect(WIDGET_SDK_SOURCE).toContain("function flashSendError(elements)");
+      const fn = WIDGET_SDK_SOURCE.match(/function flashSendError\(elements\) \{([\s\S]*?)\n  \}/);
+      expect(fn).not.toBeNull();
+      expect(fn![1]).toContain('button.classList.add("error");');
+      expect(fn![1]).not.toContain(".disabled = true");
+    });
+  });
+
+  describe("conversation feel — scroll behavior", () => {
+    it("respects a manual scroll away from the bottom during live token streaming, not just during polling", () => {
+      // Regression: previously the token handler force-scrolled on every
+      // single token regardless of where the visitor had scrolled to.
+      const tokenBranch = WIDGET_SDK_SOURCE.match(/event\.type === "token"\) \{([\s\S]*?)\} else if \(event\.type === "handoff"\)/);
+      expect(tokenBranch).not.toBeNull();
+      expect(tokenBranch![1]).toContain('if (isNearBottom(elements.scrollContainer)) scrollToBottom(elements.scrollContainer);');
+    });
+
+    it("scrolls smoothly rather than jumping, except under prefers-reduced-motion", () => {
+      expect(WIDGET_SDK_SOURCE).toContain("scroll-behavior: smooth;");
+      expect(WIDGET_SDK_SOURCE).toContain(".ai-widget-body { scroll-behavior: auto; }");
+    });
+  });
+
+  describe("conversation feel — accessibility", () => {
+    it("has a single shared sr-only live region, not one live region per message", () => {
+      const liveRegionMatches = WIDGET_SDK_SOURCE.match(/\.setAttribute\("aria-live", "polite"\)/g) || [];
+      // restoreBanner + the new shared thinking-status region — not one per
+      // bubble, which would be noisy and duplicate module spec's existing
+      // "welcome back" region design.
+      expect(liveRegionMatches.length).toBe(2);
+      expect(WIDGET_SDK_SOURCE).toContain("ai-widget-sr-only");
+    });
+
+    it("the sr-only class is visually hidden without removing it from the accessibility tree", () => {
+      const rule = WIDGET_SDK_SOURCE.match(/\.ai-widget-sr-only \{([\s\S]*?)\}/);
+      expect(rule).not.toBeNull();
+      expect(rule![1]).not.toContain("display: none");
+      expect(rule![1]).not.toContain("visibility: hidden");
+      expect(rule![1]).toContain("clip: rect(0,0,0,0);");
+    });
+
+    it("respects prefers-reduced-motion for every animation introduced in this pass", () => {
+      const startIndex = WIDGET_SDK_SOURCE.indexOf('"@media (prefers-reduced-motion: reduce) {"');
+      const endIndex = WIDGET_SDK_SOURCE.indexOf(".join(", startIndex);
+      expect(startIndex).toBeGreaterThan(-1);
+      expect(endIndex).toBeGreaterThan(startIndex);
+      const block = WIDGET_SDK_SOURCE.slice(startIndex, endIndex);
+      expect(block).toContain("ai-widget-bubble");
+      expect(block).toContain("ai-widget-typing-dots");
+      expect(block).toContain("ai-widget-cursor");
+      expect(block).toContain("ai-widget-send.error");
+      expect(block).toContain("ai-widget-send.sending");
+      expect(block).toContain("ai-widget-body");
+    });
+  });
 });

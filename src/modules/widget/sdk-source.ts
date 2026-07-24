@@ -59,6 +59,16 @@
  * this changes the server-side session flow or the Visitor Profile
  * pipeline; it is purely how the already-approved persisted session is
  * presented and coordinated client-side.
+ *
+ * As of the "feels alive" polish pass: purely perceptual changes on top of
+ * the exact same transport/pipeline — animated typing dots and a blinking
+ * cursor while a reply streams in, a subtle entrance animation on every new
+ * bubble, richer Send button states (hover/press/sending/error), and
+ * scroll-during-streaming now respects a manual scroll away from the
+ * bottom the same way the polling loop already did. Every animation is
+ * transform/opacity-only (no layout-affecting properties) and disabled
+ * under `prefers-reduced-motion`. No new network calls, no change to when
+ * or how often the widget talks to the server.
  */
 export const WIDGET_SDK_SOURCE = `(function () {
   "use strict";
@@ -147,6 +157,43 @@ export const WIDGET_SDK_SOURCE = `(function () {
 
   function scrollToBottom(container) {
     container.scrollTop = container.scrollHeight;
+  }
+
+  // Real DOM nodes rather than a CSS ::after trick, so they can be cleanly
+  // inserted into an otherwise-empty assistant bubble and removed the same
+  // way renderAssistantText already clears everything else — no separate
+  // teardown path needed.
+  function createTypingDots() {
+    var wrap = document.createElement("span");
+    wrap.className = "ai-widget-typing-dots";
+    wrap.setAttribute("aria-hidden", "true");
+    for (var i = 0; i < 3; i++) {
+      wrap.appendChild(document.createElement("span"));
+    }
+    return wrap;
+  }
+
+  // Appended after the live text on every token so it always sits at the
+  // end of whatever has streamed in so far; removed once generation
+  // finishes (module spec: "Remove the cursor when generation completes").
+  function appendCursor(textEl) {
+    var cursor = document.createElement("span");
+    cursor.className = "ai-widget-cursor";
+    cursor.setAttribute("aria-hidden", "true");
+    textEl.appendChild(cursor);
+  }
+
+  function removeCursor(textEl) {
+    var cursor = textEl.querySelector(".ai-widget-cursor");
+    if (cursor && cursor.parentNode) cursor.parentNode.removeChild(cursor);
+  }
+
+  // Single shared aria-live region for the "thinking" status (module spec
+  // §10: "Announce '<name> is thinking' using aria-live") — never a
+  // hardcoded brand name, since this SDK is shared by every tenant's
+  // widget; config.name is whatever that org actually configured.
+  function announce(elements, text) {
+    if (elements.liveRegion) elements.liveRegion.textContent = text;
   }
 
   // The per-widget-key persisted session — conversationId, draft text, and
@@ -383,19 +430,40 @@ export const WIDGET_SDK_SOURCE = `(function () {
     return pump();
   }
 
+  function setSending(elements, sending) {
+    elements.sendButton.disabled = sending;
+    elements.input.disabled = sending;
+    elements.sendButton.classList.toggle("sending", sending);
+  }
+
+  function flashSendError(elements) {
+    var button = elements.sendButton;
+    button.classList.remove("error");
+    // Force a reflow so re-adding the class restarts the shake animation
+    // even if a previous one hasn't finished — void the expression so
+    // nothing depends on the (otherwise unused) read triggering it.
+    void button.offsetWidth;
+    button.classList.add("error");
+    setTimeout(function () {
+      button.classList.remove("error");
+    }, 400);
+  }
+
   function sendMessage(text, elements, config) {
     var trimmed = (text || "").trim();
     if (!trimmed || state.sending) return;
     state.sending = true;
     elements.input.value = "";
+    setSending(elements, true);
     saveSession(config, { draft: "", pendingSince: new Date().toISOString() });
-    elements.sendButton.disabled = true;
 
     appendBubble(elements.messages, "user", config).textEl.textContent = trimmed;
     var assistant = appendBubble(elements.messages, "assistant", config);
     scrollToBottom(elements.scrollContainer);
     if (config.behaviour.showTypingIndicator) {
       assistant.root.classList.add("ai-widget-typing");
+      assistant.textEl.appendChild(createTypingDots());
+      announce(elements, (config.name || "The assistant") + " is thinking");
     }
 
     fetch(apiBase + "/api/widget/messages", {
@@ -419,7 +487,12 @@ export const WIDGET_SDK_SOURCE = `(function () {
             assistant.root.classList.remove("ai-widget-typing");
             assistant.raw += event.text;
             renderAssistantText(assistant.textEl, assistant.raw);
-            scrollToBottom(elements.scrollContainer);
+            appendCursor(assistant.textEl);
+            // Respects a visitor who scrolled up mid-stream to read earlier
+            // messages, same rule the polling loop already follows — never
+            // yank them back down just because their own reply is still
+            // arriving.
+            if (isNearBottom(elements.scrollContainer)) scrollToBottom(elements.scrollContainer);
           } else if (event.type === "handoff") {
             assistant.root.classList.remove("ai-widget-typing");
             assistant.raw = event.message;
@@ -429,6 +502,8 @@ export const WIDGET_SDK_SOURCE = `(function () {
             assistant.root.classList.add("ai-widget-error");
             assistant.textEl.textContent = event.message;
           } else if (event.type === "done") {
+            removeCursor(assistant.textEl);
+            announce(elements, "");
             if (event.messageId) state.seenMessageIds[event.messageId] = true;
             state.lastMessageAt = new Date().toISOString();
           }
@@ -437,10 +512,19 @@ export const WIDGET_SDK_SOURCE = `(function () {
         });
       })
       .catch(function () {
+        // A true send failure (network error, non-2xx response) — the
+        // message never reliably reached the server, unlike a mid-stream
+        // "error" SSE event above (where the visitor's message was already
+        // recorded and only the reply generation failed). Restore it so
+        // the visitor doesn't have to retype anything before retrying.
         assistant.root.classList.remove("ai-widget-typing");
         assistant.root.classList.add("ai-widget-error");
         assistant.textEl.textContent =
-          config.behaviour.offlineMessage || "Something went wrong. Please try again.";
+          config.behaviour.offlineMessage || "Sorry, something went wrong. Please try again.";
+        announce(elements, "");
+        elements.input.value = trimmed;
+        saveSession(config, { draft: trimmed, pendingSince: null });
+        flashSendError(elements);
       })
       .then(function () {
         // Started only once the current turn's own stream has fully
@@ -455,7 +539,8 @@ export const WIDGET_SDK_SOURCE = `(function () {
         startPolling(elements, config);
         saveSession(config, { conversationId: state.conversationId, pendingSince: null });
         state.sending = false;
-        elements.sendButton.disabled = false;
+        setSending(elements, false);
+        elements.input.focus();
       });
   }
 
@@ -474,6 +559,12 @@ export const WIDGET_SDK_SOURCE = `(function () {
       sendMessage(text, elements, config);
       return;
     }
+
+    // The losing side of the race below can wait up to ~2s
+    // (waitForConversationId) before sendMessage itself ever runs — show
+    // the sending state immediately rather than leaving the button
+    // clickable and the input untouched for that whole window.
+    setSending(elements, true);
 
     window.navigator.locks
       .request(
@@ -678,7 +769,9 @@ export const WIDGET_SDK_SOURCE = `(function () {
 
     var typingBubble = appendBubble(elements.messages, "assistant", config);
     typingBubble.root.classList.add("ai-widget-typing");
+    typingBubble.textEl.appendChild(createTypingDots());
     scrollToBottom(elements.scrollContainer);
+    announce(elements, (config.name || "The assistant") + " is thinking");
 
     var seenCountAtStart = Object.keys(state.seenMessageIds).length;
     var deadline = Date.now() + (PENDING_TIMEOUT_MS - elapsedMs);
@@ -687,6 +780,7 @@ export const WIDGET_SDK_SOURCE = `(function () {
       if (Object.keys(state.seenMessageIds).length > seenCountAtStart) {
         clearInterval(watcher);
         if (typingBubble.root.parentNode) typingBubble.root.parentNode.removeChild(typingBubble.root);
+        announce(elements, "");
         saveSession(config, { pendingSince: null });
         return;
       }
@@ -696,6 +790,7 @@ export const WIDGET_SDK_SOURCE = `(function () {
         typingBubble.root.classList.add("ai-widget-error");
         typingBubble.textEl.textContent =
           config.behaviour.offlineMessage || "This response could not be completed. Please try again.";
+        announce(elements, "");
         saveSession(config, { pendingSince: null });
       }
     }, 1000);
@@ -756,7 +851,10 @@ export const WIDGET_SDK_SOURCE = `(function () {
       "}",
       ".ai-widget-panel.open { display: flex; }",
       ".ai-widget-header { background: var(--ai-widget-primary); color: #fff; padding: 16px; font-weight: 600; }",
-      ".ai-widget-body { position: relative; flex: 1; padding: 16px; overflow-y: auto; color: #111; font-size: 14px; }",
+      ".ai-widget-body {",
+      "  position: relative; flex: 1; padding: 16px; overflow-y: auto; color: #111; font-size: 14px;",
+      "  scroll-behavior: smooth;",
+      "}",
       ".ai-widget-restore-banner {",
       "  position: absolute; top: 8px; left: 8px; right: 8px; z-index: 1;",
       "  display: flex; align-items: center; justify-content: center;",
@@ -775,13 +873,31 @@ export const WIDGET_SDK_SOURCE = `(function () {
       ".ai-widget-bubble {",
       "  max-width: 85%; padding: 8px 12px; border-radius: 12px; font-size: 13px;",
       "  display: flex; flex-direction: column; gap: 2px; white-space: pre-wrap; word-break: break-word;",
+      "  animation: ai-widget-bubble-in 0.25s ease-out;",
       "}",
       ".ai-widget-bubble-user { align-self: flex-end; background: var(--ai-widget-primary); color: #fff; }",
       ".ai-widget-bubble-assistant { align-self: flex-start; background: #f1f1f3; color: #111; }",
       ".ai-widget-bubble-error { background: #fdecea; color: #b3261e; }",
       ".ai-widget-bubble-time { font-size: 10px; opacity: 0.7; align-self: flex-end; }",
-      ".ai-widget-typing .ai-widget-bubble-text::after { content: '...'; }",
       ".ai-widget-bubble-text { display: block; }",
+      // Three-dot "thinking" indicator — real DOM nodes (see
+      // createTypingDots below), not a CSS ::after trick, so it can be
+      // cleanly inserted/removed alongside streamed text without a content
+      // property that can't itself be transitioned smoothly.
+      ".ai-widget-typing-dots { display: inline-flex; align-items: center; gap: 3px; padding: 2px 0; }",
+      ".ai-widget-typing-dots span {",
+      "  width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: 0.35;",
+      "  animation: ai-widget-bounce 1.2s ease-in-out infinite;",
+      "}",
+      ".ai-widget-typing-dots span:nth-child(2) { animation-delay: 0.15s; }",
+      ".ai-widget-typing-dots span:nth-child(3) { animation-delay: 0.3s; }",
+      // Streaming cursor — appended after the live text while tokens are
+      // arriving, removed the moment generation finishes (see
+      // appendCursor/removeCursor).
+      ".ai-widget-cursor {",
+      "  display: inline-block; width: 2px; height: 1em; margin-left: 1px; vertical-align: text-bottom;",
+      "  background: currentColor; animation: ai-widget-blink 1s step-end infinite;",
+      "}",
       ".ai-widget-paragraph { margin: 0 0 8px; }",
       ".ai-widget-paragraph:last-child { margin-bottom: 0; }",
       ".ai-widget-list { margin: 4px 0 8px; padding-left: 18px; }",
@@ -792,13 +908,48 @@ export const WIDGET_SDK_SOURCE = `(function () {
       ".ai-widget-input-row { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid #eee; }",
       ".ai-widget-input {",
       "  flex: 1; border: 1px solid #ddd; border-radius: 999px; padding: 8px 12px; font-size: 13px; outline: none;",
+      "  transition: opacity 0.15s ease;",
       "}",
+      ".ai-widget-input:disabled { opacity: 0.6; }",
       ".ai-widget-send {",
       "  border: none; border-radius: 999px; padding: 8px 16px; font-size: 13px; cursor: pointer;",
       "  background: var(--ai-widget-primary); color: #fff;",
+      "  display: inline-flex; align-items: center; gap: 6px;",
+      "  transition: opacity 0.15s ease, transform 0.1s ease;",
       "}",
+      ".ai-widget-send:hover:not(:disabled) { opacity: 0.9; }",
+      ".ai-widget-send:active:not(:disabled) { transform: scale(0.96); }",
       ".ai-widget-send:disabled { opacity: 0.6; cursor: default; }",
+      ".ai-widget-send.sending { cursor: progress; }",
+      ".ai-widget-send.error { animation: ai-widget-shake 0.4s ease; }",
+      // Spinner box is always in flow (opacity toggle, not display toggle)
+      // so its appearance never shifts the "Send" label or button width.
+      ".ai-widget-send-spinner {",
+      "  width: 11px; height: 11px; border-radius: 50%; flex: none;",
+      "  border: 2px solid rgba(255,255,255,0.4); border-top-color: #fff;",
+      "  opacity: 0; transition: opacity 0.15s ease;",
+      "}",
+      ".ai-widget-send.sending .ai-widget-send-spinner { opacity: 1; animation: ai-widget-spin 0.6s linear infinite; }",
       ".ai-widget-footer { padding: 8px 16px; font-size: 11px; color: #888; text-align: center; }",
+      // Visually hidden but still announced by screen readers — used for
+      // the "thinking" status update (module spec: accessibility §10).
+      ".ai-widget-sr-only {",
+      "  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;",
+      "  overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0;",
+      "}",
+      "@keyframes ai-widget-bubble-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }",
+      "@keyframes ai-widget-bounce { 0%, 60%, 100% { transform: translateY(0); opacity: 0.35; } 30% { transform: translateY(-4px); opacity: 1; } }",
+      "@keyframes ai-widget-blink { 50% { opacity: 0; } }",
+      "@keyframes ai-widget-spin { to { transform: rotate(360deg); } }",
+      "@keyframes ai-widget-shake { 25% { transform: translateX(-3px); } 75% { transform: translateX(3px); } }",
+      "@media (prefers-reduced-motion: reduce) {",
+      "  .ai-widget-bubble { animation: none; }",
+      "  .ai-widget-typing-dots span { animation: none; opacity: 0.7; }",
+      "  .ai-widget-cursor { animation: none; opacity: 0.6; }",
+      "  .ai-widget-send.error { animation: none; }",
+      "  .ai-widget-send.sending .ai-widget-send-spinner { animation: none; }",
+      "  .ai-widget-body { scroll-behavior: auto; }",
+      "}",
     ].join("\\n");
 
     var root = document.createElement("div");
@@ -829,7 +980,18 @@ export const WIDGET_SDK_SOURCE = `(function () {
 
     var messages = document.createElement("div");
     messages.className = "ai-widget-messages";
-    var elements = { messages: messages, scrollContainer: body, restoreBanner: restoreBanner };
+
+    // sr-only status region (module spec §10: "Announce '<name> is
+    // thinking' using aria-live") — a single shared node updated in place
+    // rather than a live region per bubble, so restored history and polled
+    // replies don't trigger noisy announcements of their own.
+    var liveRegion = document.createElement("div");
+    liveRegion.className = "ai-widget-sr-only";
+    liveRegion.setAttribute("role", "status");
+    liveRegion.setAttribute("aria-live", "polite");
+    body.appendChild(liveRegion);
+
+    var elements = { messages: messages, scrollContainer: body, restoreBanner: restoreBanner, liveRegion: liveRegion };
 
     if (config.behaviour.suggestedQuestions && config.behaviour.suggestedQuestions.length) {
       var suggested = document.createElement("div");
@@ -857,7 +1019,14 @@ export const WIDGET_SDK_SOURCE = `(function () {
     var sendButton = document.createElement("button");
     sendButton.type = "button";
     sendButton.className = "ai-widget-send";
-    sendButton.textContent = "Send";
+    var sendLabel = document.createElement("span");
+    sendLabel.className = "ai-widget-send-label";
+    sendLabel.textContent = "Send";
+    var sendSpinner = document.createElement("span");
+    sendSpinner.className = "ai-widget-send-spinner";
+    sendSpinner.setAttribute("aria-hidden", "true");
+    sendButton.appendChild(sendLabel);
+    sendButton.appendChild(sendSpinner);
     inputRow.appendChild(input);
     inputRow.appendChild(sendButton);
     panel.appendChild(inputRow);
