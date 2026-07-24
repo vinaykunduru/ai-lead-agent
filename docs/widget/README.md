@@ -8,6 +8,7 @@ The embeddable chat widget a company puts on their own website — the only surf
 - [Configuration](#configuration)
 - [Security model](#security-model)
 - [Module doc](#module-doc)
+- [Technical debt / backlog](./technical-debt.md)
 
 ## Installation
 
