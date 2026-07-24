@@ -435,16 +435,19 @@ describe("WIDGET_SDK_SOURCE", () => {
     });
 
     it("is inserted for both a live send and a resumed pending response", () => {
+      // Both call sites now go through createThinkingStatus(), which itself
+      // wraps createTypingDots() — reusing the dots primitive rather than
+      // duplicating it, per the "premium micro-interactions" pass.
       const sendMessageStart = WIDGET_SDK_SOURCE.indexOf("function sendMessage(text, elements, config)");
       const sendMessageEnd = WIDGET_SDK_SOURCE.indexOf("function sendMessageCoordinated");
       const sendMessageBody = WIDGET_SDK_SOURCE.slice(sendMessageStart, sendMessageEnd);
-      expect(sendMessageBody).toContain("createTypingDots()");
+      expect(sendMessageBody).toContain("createThinkingStatus()");
 
       const resumeFn = WIDGET_SDK_SOURCE.match(
         /function maybeResumePendingResponse\(elements, config, pendingSince\) \{([\s\S]*?)\n  \}/,
       );
       expect(resumeFn).not.toBeNull();
-      expect(resumeFn![1]).toContain("createTypingDots()");
+      expect(resumeFn![1]).toContain("createThinkingStatus()");
     });
 
     it("announces thinking status via the shared live region using the org's own configured name, never a hardcoded brand", () => {
@@ -569,6 +572,154 @@ describe("WIDGET_SDK_SOURCE", () => {
       expect(block).toContain("ai-widget-send.error");
       expect(block).toContain("ai-widget-send.sending");
       expect(block).toContain("ai-widget-body");
+    });
+  });
+
+  describe("premium polish — rotating thinking status", () => {
+    it("rotates between generic, honest status phrases rather than a single static string", () => {
+      const phrasesMatch = WIDGET_SDK_SOURCE.match(/var THINKING_PHRASES = \[([\s\S]*?)\];/);
+      expect(phrasesMatch).not.toBeNull();
+      const phrases = phrasesMatch![1].match(/"[^"]+"/g) || [];
+      expect(phrases.length).toBeGreaterThanOrEqual(4);
+      // None of these should read as a claim about a specific, unverifiable
+      // internal step (e.g. "searching the database") — only generic,
+      // always-true "a reply is being prepared" language.
+      for (const phrase of phrases) {
+        expect(phrase.toLowerCase()).not.toContain("search");
+        expect(phrase.toLowerCase()).not.toContain("database");
+      }
+    });
+
+    it("shows dots AND rotating text together, and stops rotating once the first token morphs the bubble", () => {
+      expect(WIDGET_SDK_SOURCE).toContain("function createThinkingStatus()");
+      expect(WIDGET_SDK_SOURCE).toContain("function startThinkingRotation(textNode)");
+      expect(WIDGET_SDK_SOURCE).toContain("function stopThinkingRotation(rotatorId)");
+
+      const sendMessageStart = WIDGET_SDK_SOURCE.indexOf("function sendMessage(text, elements, config)");
+      const sendMessageEnd = WIDGET_SDK_SOURCE.indexOf("function sendMessageCoordinated");
+      const body = WIDGET_SDK_SOURCE.slice(sendMessageStart, sendMessageEnd);
+      expect(body).toContain("statusRotator = startThinkingRotation(thinking.textEl)");
+      expect(body).toContain("stopThinkingRotation(statusRotator)");
+    });
+
+    it("never re-announces to screen readers on every rotation (only once, via the existing live region)", () => {
+      const rotationFn = WIDGET_SDK_SOURCE.match(/function startThinkingRotation\(textNode\) \{([\s\S]*?)\n  \}/);
+      expect(rotationFn).not.toBeNull();
+      expect(rotationFn![1]).not.toContain("announce(");
+    });
+  });
+
+  describe("premium polish — morph thinking into response", () => {
+    it("applies a one-time morph class on the first token, inside the same bubble, and never creates a second bubble", () => {
+      const tokenBranch = WIDGET_SDK_SOURCE.match(/event\.type === "token"\) \{([\s\S]*?)\}\s*else if \(event\.type === "handoff"/);
+      expect(tokenBranch).not.toBeNull();
+      expect(tokenBranch![1]).toContain('if (!morphed)');
+      expect(tokenBranch![1]).toContain('assistant.textEl.classList.add("ai-widget-morph")');
+      // Only ever one appendBubble call for the assistant turn in sendMessage.
+      const sendMessageStart = WIDGET_SDK_SOURCE.indexOf("function sendMessage(text, elements, config)");
+      const sendMessageEnd = WIDGET_SDK_SOURCE.indexOf("function sendMessageCoordinated");
+      const body = WIDGET_SDK_SOURCE.slice(sendMessageStart, sendMessageEnd);
+      const assistantAppends = body.match(/appendBubble\(elements\.messages, "assistant", config\)/g) || [];
+      expect(assistantAppends.length).toBe(1);
+    });
+
+    it("the morph animation is opacity-only and disabled under reduced motion", () => {
+      const rule = WIDGET_SDK_SOURCE.match(/"@keyframes ai-widget-morph-in \{([\s\S]*?)\}",/);
+      expect(rule).not.toBeNull();
+      expect(rule![1]).toContain("opacity");
+      expect(rule![1]).not.toContain("width");
+      expect(rule![1]).not.toContain("height");
+      expect(rule![1]).not.toContain("margin");
+
+      const startIndex = WIDGET_SDK_SOURCE.indexOf('"@media (prefers-reduced-motion: reduce) {"');
+      const endIndex = WIDGET_SDK_SOURCE.indexOf(".join(", startIndex);
+      const block = WIDGET_SDK_SOURCE.slice(startIndex, endIndex);
+      expect(block).toContain("ai-widget-morph");
+    });
+  });
+
+  describe("premium polish — message grouping and AI avatar", () => {
+    it("wraps assistant messages in an avatar+bubble row without changing appendBubble's return contract for existing callers", () => {
+      const fn = WIDGET_SDK_SOURCE.match(/function appendBubble\(container, role, config, timestamp\) \{([\s\S]*?)\n  \}/);
+      expect(fn).not.toBeNull();
+      expect(fn![1]).toContain('role === "assistant"');
+      expect(fn![1]).toContain("ai-widget-message-row");
+      expect(fn![1]).toContain("return { root: bubble, outer: outer, textEl: textEl, raw: \"\" }");
+    });
+
+    it("uses the org's configured avatarUrl, falling back to an initial derived from config.name — never a hardcoded icon", () => {
+      expect(WIDGET_SDK_SOURCE).toContain("config.appearance.avatarUrl");
+      expect(WIDGET_SDK_SOURCE).toContain('(config.name || "A").charAt(0).toUpperCase()');
+    });
+
+    it("shows the avatar only once per consecutive group, reserving its width via visibility rather than omitting it", () => {
+      const fn = WIDGET_SDK_SOURCE.match(/function appendBubble\(container, role, config, timestamp\) \{([\s\S]*?)\n  \}/);
+      expect(fn![1]).toContain('avatar.style.visibility = "hidden"');
+    });
+
+    it("removes the whole avatar+bubble row (not just the bubble) when a resumed typing indicator is cleaned up", () => {
+      const resumeFn = WIDGET_SDK_SOURCE.match(
+        /function maybeResumePendingResponse\(elements, config, pendingSince\) \{([\s\S]*?)\n  \}/,
+      );
+      expect(resumeFn).not.toBeNull();
+      expect(resumeFn![1]).toContain("typingBubble.outer.parentNode.removeChild(typingBubble.outer)");
+      expect(resumeFn![1]).not.toContain("typingBubble.root.parentNode.removeChild(typingBubble.root)");
+    });
+
+    it("reduces spacing for consecutive same-role messages without double-margining nested assistant bubbles", () => {
+      expect(WIDGET_SDK_SOURCE).toContain(".ai-widget-messages > .ai-widget-bubble { margin-top: 8px; }");
+      expect(WIDGET_SDK_SOURCE).toContain(".ai-widget-messages > .ai-widget-bubble-grouped { margin-top: 2px; }");
+      expect(WIDGET_SDK_SOURCE).toContain(".ai-widget-row-grouped { margin-top: 2px; }");
+    });
+  });
+
+  describe("premium polish — header status and smart loading states", () => {
+    it("shows a minimal, honest 'Online' presence line, not a fabricated response-time claim", () => {
+      expect(WIDGET_SDK_SOURCE).toContain("ai-widget-header-status");
+      expect(WIDGET_SDK_SOURCE).toContain("ai-widget-status-dot");
+      const headerBlock = WIDGET_SDK_SOURCE.match(/var header = document\.createElement\("div"\);([\s\S]*?)panel\.appendChild\(header\);/);
+      expect(headerBlock).not.toBeNull();
+      expect(headerBlock![1]).toContain('"Online"');
+      expect(headerBlock![1]).not.toContain("Typically replies");
+    });
+
+    it("shows a brief loading phrase while conversation history is restoring, removed before real messages render", () => {
+      const fn = WIDGET_SDK_SOURCE.match(/function restoreHistory\(elements, config, conversationId, onRendered\) \{([\s\S]*?)\n  \}\n\n  \/\//);
+      expect(fn).not.toBeNull();
+      expect(fn![1]).toContain("Restoring your conversation");
+      expect(fn![1]).toContain("clearRestoringIndicator()");
+    });
+  });
+
+  describe("premium polish — empty chat quick-suggestion lifecycle", () => {
+    it("removes the suggested-questions chips once the visitor sends their first message", () => {
+      const sendMessageStart = WIDGET_SDK_SOURCE.indexOf("function sendMessage(text, elements, config)");
+      const sendMessageEnd = WIDGET_SDK_SOURCE.indexOf("function sendMessageCoordinated");
+      const body = WIDGET_SDK_SOURCE.slice(sendMessageStart, sendMessageEnd);
+      expect(body).toContain("elements.suggestedContainer.parentNode.removeChild(elements.suggestedContainer)");
+    });
+
+    it("does not show first-time chips for a returning visitor who already has an active conversation", () => {
+      const restoreBranch = WIDGET_SDK_SOURCE.match(/if \(session\.conversationId\) \{([\s\S]*?)\n      \}/);
+      expect(restoreBranch).not.toBeNull();
+      expect(restoreBranch![1]).toContain("elements.suggestedContainer.parentNode.removeChild(elements.suggestedContainer)");
+    });
+
+    it("never hardcodes brand-specific example copy (services list, emoji categories) — stays on config.behaviour fields", () => {
+      expect(WIDGET_SDK_SOURCE).not.toContain("Websites");
+      expect(WIDGET_SDK_SOURCE).not.toContain("AI Automation");
+      expect(WIDGET_SDK_SOURCE).not.toContain("Digital Marketing");
+    });
+  });
+
+  describe("premium polish — deliberately out of scope", () => {
+    it("does not implement a context/topic chip, which would require exposing Visitor Profile intent publicly", () => {
+      // No new public data flow was added for this pass — confirms the
+      // widget still only ever reads the same public config/message shapes
+      // it already did (no new field name like "intent" or "topic" wired
+      // into a fetch/render path).
+      expect(WIDGET_SDK_SOURCE).not.toContain("visitorProfile");
+      expect(WIDGET_SDK_SOURCE).not.toContain("ai-widget-context-chip");
     });
   });
 });

@@ -69,6 +69,24 @@
  * transform/opacity-only (no layout-affecting properties) and disabled
  * under `prefers-reduced-motion`. No new network calls, no change to when
  * or how often the widget talks to the server.
+ *
+ * As of the "premium micro-interactions" pass: the thinking indicator now
+ * rotates through a small set of honest, generic status phrases (never a
+ * claim about a specific internal step that may not actually be
+ * happening) instead of only showing dots; the same bubble morphs into the
+ * streamed response in place via a brief one-time opacity transition
+ * (never a second bubble swapped in); consecutive same-role messages sit
+ * closer together; an assistant message shows a small avatar (the org's
+ * configured appearance.avatarUrl, falling back to an initial derived from
+ * config.name — never a hardcoded brand icon, since this SDK is shared by
+ * every tenant's widget); the header gains a minimal status line; and
+ * history restore shows its own brief loading phrase. A context/topic chip
+ * was deliberately NOT built here — it would require exposing the Visitor
+ * Profile's AI-derived intent through a new public, unauthenticated
+ * endpoint, which is a real data-exposure decision outside this pass's
+ * scope, not a styling one. Still no new network calls, no change to the
+ * transport, and every new animation remains transform/opacity-only with a
+ * `prefers-reduced-motion` override.
  */
 export const WIDGET_SDK_SOURCE = `(function () {
   "use strict";
@@ -188,6 +206,62 @@ export const WIDGET_SDK_SOURCE = `(function () {
     if (cursor && cursor.parentNode) cursor.parentNode.removeChild(cursor);
   }
 
+  // Deliberately generic across every possible business/vertical this SDK
+  // could be embedded for, and deliberately non-specific about *what* is
+  // happening server-side (never "Searching our database" or similar — a
+  // claim about a concrete step that may not actually be true for a given
+  // request). These only ever communicate "a real reply is being put
+  // together," which is always true whenever this indicator is shown.
+  var THINKING_PHRASES = [
+    "Thinking",
+    "Looking into that for you",
+    "Preparing your answer",
+    "Reviewing your message",
+    "Putting this together",
+    "Working on it",
+  ];
+
+  function pickThinkingPhrase(exclude) {
+    var pool = exclude
+      ? THINKING_PHRASES.filter(function (phrase) {
+          return phrase !== exclude;
+        })
+      : THINKING_PHRASES;
+    return pool[Math.floor(Math.random() * pool.length)];
+  }
+
+  // Same dots as createTypingDots plus a short rotating status phrase,
+  // bundled together since every "something is happening" moment in this
+  // SDK (thinking, resuming a pending reply) wants both.
+  function createThinkingStatus() {
+    var wrap = document.createElement("span");
+    wrap.className = "ai-widget-thinking-status";
+    wrap.setAttribute("aria-hidden", "true");
+    var text = document.createElement("span");
+    text.className = "ai-widget-thinking-text";
+    text.textContent = pickThinkingPhrase();
+    wrap.appendChild(text);
+    wrap.appendChild(createTypingDots());
+    return { root: wrap, textEl: text };
+  }
+
+  // Swaps the visible phrase every couple of seconds so a longer wait
+  // doesn't feel stuck on one line — purely decorative text, not
+  // re-announced to screen readers on every rotation (the one "<name> is
+  // thinking" aria-live announcement already covers the accessible story;
+  // re-announcing every 2s would just be noisy).
+  function startThinkingRotation(textNode) {
+    var last = textNode.textContent;
+    return setInterval(function () {
+      last = pickThinkingPhrase(last);
+      textNode.textContent = last;
+    }, 2200);
+  }
+
+  function stopThinkingRotation(rotatorId) {
+    if (rotatorId) window.clearInterval(rotatorId);
+  }
+
   // Single shared aria-live region for the "thinking" status (module spec
   // §10: "Announce '<name> is thinking' using aria-live") — never a
   // hardcoded brand name, since this SDK is shared by every tenant's
@@ -279,9 +353,23 @@ export const WIDGET_SDK_SOURCE = `(function () {
     host.style.zIndex = "2147483000";
   }
 
+  // "outer" (the element actually appended to container) differs from
+  // "root" (always the bubble itself) only for assistant messages, which
+  // get wrapped in a small avatar+bubble row — see below. Every existing
+  // caller that toggles state classes (ai-widget-typing/-error) keeps using
+  // .root, since that's still always the bubble; only the two callers that
+  // remove a bubble entirely need .outer, so the avatar doesn't get left
+  // behind as an orphaned element.
   function appendBubble(container, role, config, timestamp) {
+    // Two consecutive messages from the same role are visually grouped
+    // (tighter spacing, avatar shown only once) — matches the last element
+    // actually appended, whether that was a bare bubble (user) or a row
+    // (assistant), via the shared data-role marker set below.
+    var lastOuter = container.lastElementChild;
+    var grouped = !!(lastOuter && lastOuter.getAttribute("data-role") === role);
+
     var bubble = document.createElement("div");
-    bubble.className = "ai-widget-bubble ai-widget-bubble-" + role;
+    bubble.className = "ai-widget-bubble ai-widget-bubble-" + role + (grouped ? " ai-widget-bubble-grouped" : "");
 
     var textEl = document.createElement("span");
     textEl.className = "ai-widget-bubble-text";
@@ -294,9 +382,34 @@ export const WIDGET_SDK_SOURCE = `(function () {
       bubble.appendChild(time);
     }
 
-    container.appendChild(bubble);
+    var outer = bubble;
+    if (role === "assistant") {
+      var row = document.createElement("div");
+      row.className = "ai-widget-message-row" + (grouped ? " ai-widget-row-grouped" : "");
+      var avatar = document.createElement("span");
+      avatar.className = "ai-widget-avatar";
+      avatar.setAttribute("aria-hidden", "true");
+      if (grouped) {
+        // Reserve the same width so the bubble stays aligned with the rest
+        // of the group, without repeating the avatar for every message.
+        avatar.style.visibility = "hidden";
+      } else if (config.appearance && config.appearance.avatarUrl) {
+        var avatarImg = document.createElement("img");
+        avatarImg.src = config.appearance.avatarUrl;
+        avatarImg.alt = "";
+        avatar.appendChild(avatarImg);
+      } else {
+        avatar.textContent = (config.name || "A").charAt(0).toUpperCase();
+      }
+      row.appendChild(avatar);
+      row.appendChild(bubble);
+      outer = row;
+    }
+    outer.setAttribute("data-role", role);
+
+    container.appendChild(outer);
     container.scrollTop = container.scrollHeight;
-    return { root: bubble, textEl: textEl, raw: "" };
+    return { root: bubble, outer: outer, textEl: textEl, raw: "" };
   }
 
   // Only http/https — blocks a javascript: URI or similar from ever
@@ -457,12 +570,24 @@ export const WIDGET_SDK_SOURCE = `(function () {
     setSending(elements, true);
     saveSession(config, { draft: "", pendingSince: new Date().toISOString() });
 
+    if (elements.suggestedContainer && elements.suggestedContainer.parentNode) {
+      elements.suggestedContainer.parentNode.removeChild(elements.suggestedContainer);
+      elements.suggestedContainer = null;
+    }
+
     appendBubble(elements.messages, "user", config).textEl.textContent = trimmed;
     var assistant = appendBubble(elements.messages, "assistant", config);
     scrollToBottom(elements.scrollContainer);
+    var statusRotator = null;
+    // Set once the first token arrives, so the dots→text swap gets the
+    // brief morph transition exactly once and every later token just
+    // updates text normally (no per-token flicker).
+    var morphed = false;
     if (config.behaviour.showTypingIndicator) {
       assistant.root.classList.add("ai-widget-typing");
-      assistant.textEl.appendChild(createTypingDots());
+      var thinking = createThinkingStatus();
+      assistant.textEl.appendChild(thinking.root);
+      statusRotator = startThinkingRotation(thinking.textEl);
       announce(elements, (config.name || "The assistant") + " is thinking");
     }
 
@@ -484,6 +609,18 @@ export const WIDGET_SDK_SOURCE = `(function () {
             state.conversationId = event.conversationId;
             saveSession(config, { conversationId: state.conversationId });
           } else if (event.type === "token") {
+            if (!morphed) {
+              morphed = true;
+              stopThinkingRotation(statusRotator);
+              statusRotator = null;
+              // The dots/status text get cleared by renderAssistantText
+              // below same as always — this class just gives that exact
+              // moment a brief cross-fade instead of an instant swap, so it
+              // reads as the bubble "turning into" the response rather than
+              // being replaced (module spec: "Same bubble, same position,
+              // no jump, no flicker").
+              assistant.textEl.classList.add("ai-widget-morph");
+            }
             assistant.root.classList.remove("ai-widget-typing");
             assistant.raw += event.text;
             renderAssistantText(assistant.textEl, assistant.raw);
@@ -494,10 +631,14 @@ export const WIDGET_SDK_SOURCE = `(function () {
             // arriving.
             if (isNearBottom(elements.scrollContainer)) scrollToBottom(elements.scrollContainer);
           } else if (event.type === "handoff") {
+            stopThinkingRotation(statusRotator);
+            statusRotator = null;
             assistant.root.classList.remove("ai-widget-typing");
             assistant.raw = event.message;
             renderAssistantText(assistant.textEl, assistant.raw);
           } else if (event.type === "error") {
+            stopThinkingRotation(statusRotator);
+            statusRotator = null;
             assistant.root.classList.remove("ai-widget-typing");
             assistant.root.classList.add("ai-widget-error");
             assistant.textEl.textContent = event.message;
@@ -517,6 +658,8 @@ export const WIDGET_SDK_SOURCE = `(function () {
         // "error" SSE event above (where the visitor's message was already
         // recorded and only the reply generation failed). Restore it so
         // the visitor doesn't have to retype anything before retrying.
+        stopThinkingRotation(statusRotator);
+        statusRotator = null;
         assistant.root.classList.remove("ai-widget-typing");
         assistant.root.classList.add("ai-widget-error");
         assistant.textEl.textContent =
@@ -703,11 +846,30 @@ export const WIDGET_SDK_SOURCE = `(function () {
     var url =
       apiBase + "/api/widget/conversations/" + conversationId + "/messages?key=" + encodeURIComponent(publicKey);
 
+    // A brief, honest loading phrase for the one operation that previously
+    // had none — the panel could sit visually empty for a moment while
+    // history loads. Removed the instant a result (success or failure)
+    // comes back; on a fast connection this simply never gets time to be
+    // noticed, which is fine — nothing here artificially extends the wait.
+    var restoring = document.createElement("div");
+    restoring.className = "ai-widget-status-line";
+    restoring.setAttribute("aria-hidden", "true");
+    var restoringText = document.createElement("span");
+    restoringText.textContent = "Restoring your conversation";
+    restoring.appendChild(restoringText);
+    restoring.appendChild(createTypingDots());
+    elements.messages.appendChild(restoring);
+
+    function clearRestoringIndicator() {
+      if (restoring.parentNode) restoring.parentNode.removeChild(restoring);
+    }
+
     return fetch(url, { credentials: "omit" })
       .then(function (response) {
         return response.ok ? response.json() : { messages: [] };
       })
       .then(function (data) {
+        clearRestoringIndicator();
         (data.messages || []).forEach(function (message) {
           state.lastMessageAt = message.createdAt;
           if (state.seenMessageIds[message.id]) return;
@@ -731,6 +893,7 @@ export const WIDGET_SDK_SOURCE = `(function () {
         // than silently forking a new one; this page view just starts
         // without visible history. Graceful fallback: scroll to the
         // (empty) bottom rather than leaving a half-restored scroll state.
+        clearRestoringIndicator();
         scrollToBottom(elements.scrollContainer);
         startPolling(elements, config);
         if (onRendered) onRendered(false);
@@ -769,7 +932,9 @@ export const WIDGET_SDK_SOURCE = `(function () {
 
     var typingBubble = appendBubble(elements.messages, "assistant", config);
     typingBubble.root.classList.add("ai-widget-typing");
-    typingBubble.textEl.appendChild(createTypingDots());
+    var thinking = createThinkingStatus();
+    typingBubble.textEl.appendChild(thinking.root);
+    var statusRotator = startThinkingRotation(thinking.textEl);
     scrollToBottom(elements.scrollContainer);
     announce(elements, (config.name || "The assistant") + " is thinking");
 
@@ -779,13 +944,18 @@ export const WIDGET_SDK_SOURCE = `(function () {
     var watcher = setInterval(function () {
       if (Object.keys(state.seenMessageIds).length > seenCountAtStart) {
         clearInterval(watcher);
-        if (typingBubble.root.parentNode) typingBubble.root.parentNode.removeChild(typingBubble.root);
+        stopThinkingRotation(statusRotator);
+        // .outer, not .root — for an assistant bubble that's the avatar+
+        // bubble row, so removing it doesn't leave an orphaned avatar
+        // behind once the real (already-rendered) reply takes its place.
+        if (typingBubble.outer.parentNode) typingBubble.outer.parentNode.removeChild(typingBubble.outer);
         announce(elements, "");
         saveSession(config, { pendingSince: null });
         return;
       }
       if (Date.now() >= deadline) {
         clearInterval(watcher);
+        stopThinkingRotation(statusRotator);
         typingBubble.root.classList.remove("ai-widget-typing");
         typingBubble.root.classList.add("ai-widget-error");
         typingBubble.textEl.textContent =
@@ -850,7 +1020,10 @@ export const WIDGET_SDK_SOURCE = `(function () {
       "  box-shadow: 0 8px 30px rgba(0,0,0,0.25); overflow: hidden; flex-direction: column;",
       "}",
       ".ai-widget-panel.open { display: flex; }",
-      ".ai-widget-header { background: var(--ai-widget-primary); color: #fff; padding: 16px; font-weight: 600; }",
+      ".ai-widget-header { background: var(--ai-widget-primary); color: #fff; padding: 14px 16px; }",
+      ".ai-widget-header-title { font-weight: 600; font-size: 14px; }",
+      ".ai-widget-header-status { display: flex; align-items: center; gap: 5px; margin-top: 3px; font-size: 11px; opacity: 0.85; }",
+      ".ai-widget-status-dot { width: 6px; height: 6px; border-radius: 50%; background: #22c55e; flex: none; }",
       ".ai-widget-body {",
       "  position: relative; flex: 1; padding: 16px; overflow-y: auto; color: #111; font-size: 14px;",
       "  scroll-behavior: smooth;",
@@ -868,15 +1041,46 @@ export const WIDGET_SDK_SOURCE = `(function () {
       ".ai-widget-suggested button {",
       "  border: 1px solid var(--ai-widget-accent); color: var(--ai-widget-accent);",
       "  background: none; border-radius: 999px; padding: 6px 12px; font-size: 12px; cursor: pointer;",
+      "  transition: opacity 0.15s ease, transform 0.1s ease;",
       "}",
-      ".ai-widget-messages { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }",
+      ".ai-widget-suggested button:hover { opacity: 0.75; }",
+      ".ai-widget-suggested button:active { transform: scale(0.96); }",
+      ".ai-widget-messages { display: flex; flex-direction: column; margin-top: 12px; }",
+      // A history-restore/loading phrase — same dots primitive as the
+      // thinking indicator, reused rather than duplicated (module spec
+      // §14: "Reuse existing components").
+      ".ai-widget-status-line { display: flex; align-items: center; gap: 6px; padding: 4px 0; font-size: 12px; opacity: 0.6; }",
+      // Avatar+bubble row for assistant messages only — user messages stay
+      // bare bubbles, direct children of .ai-widget-messages.
+      ".ai-widget-message-row { display: flex; align-items: flex-end; margin-top: 8px; }",
+      ".ai-widget-message-row:first-child { margin-top: 0; }",
+      ".ai-widget-row-grouped { margin-top: 2px; }",
+      ".ai-widget-avatar {",
+      "  width: 20px; height: 20px; border-radius: 50%; flex: none; margin-right: 6px;",
+      "  display: flex; align-items: center; justify-content: center; overflow: hidden;",
+      "  background: var(--ai-widget-primary); color: #fff; font-size: 10px; font-weight: 600;",
+      "}",
+      ".ai-widget-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }",
       ".ai-widget-bubble {",
       "  max-width: 85%; padding: 8px 12px; border-radius: 12px; font-size: 13px;",
       "  display: flex; flex-direction: column; gap: 2px; white-space: pre-wrap; word-break: break-word;",
       "  animation: ai-widget-bubble-in 0.25s ease-out;",
       "}",
+      // Scoped to a *direct* child of .ai-widget-messages — only true for
+      // bare user bubbles. An assistant bubble is nested one level deeper
+      // inside .ai-widget-message-row, which already carries its own
+      // margin-top/grouped spacing, so this must not also apply there (it
+      // would double the gap and misalign the bubble against its avatar).
+      ".ai-widget-messages > .ai-widget-bubble { margin-top: 8px; }",
+      ".ai-widget-messages > .ai-widget-bubble:first-child { margin-top: 0; }",
+      ".ai-widget-messages > .ai-widget-bubble-grouped { margin-top: 2px; }",
       ".ai-widget-bubble-user { align-self: flex-end; background: var(--ai-widget-primary); color: #fff; }",
-      ".ai-widget-bubble-assistant { align-self: flex-start; background: #f1f1f3; color: #111; }",
+      // No align-self here: an assistant bubble now sits inside
+      // .ai-widget-message-row (a flex row, not this column), where
+      // align-self would instead affect vertical cross-axis alignment
+      // against the avatar — the row's own left-aligned layout already
+      // places assistant messages correctly.
+      ".ai-widget-bubble-assistant { background: #f1f1f3; color: #111; }",
       ".ai-widget-bubble-error { background: #fdecea; color: #b3261e; }",
       ".ai-widget-bubble-time { font-size: 10px; opacity: 0.7; align-self: flex-end; }",
       ".ai-widget-bubble-text { display: block; }",
@@ -891,6 +1095,13 @@ export const WIDGET_SDK_SOURCE = `(function () {
       "}",
       ".ai-widget-typing-dots span:nth-child(2) { animation-delay: 0.15s; }",
       ".ai-widget-typing-dots span:nth-child(3) { animation-delay: 0.3s; }",
+      ".ai-widget-thinking-status { display: inline-flex; align-items: center; gap: 6px; }",
+      ".ai-widget-thinking-text { font-size: 12px; opacity: 0.75; }",
+      // One-time cross-fade for the moment the bubble's dots/status text
+      // get replaced by the first streamed text (module spec: "Same
+      // bubble, same position, no jump, no flicker") — applied once on the
+      // first token and never removed, so it never re-triggers per token.
+      ".ai-widget-morph { animation: ai-widget-morph-in 0.2s ease; }",
       // Streaming cursor — appended after the live text while tokens are
       // arriving, removed the moment generation finishes (see
       // appendCursor/removeCursor).
@@ -937,17 +1148,19 @@ export const WIDGET_SDK_SOURCE = `(function () {
       "  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;",
       "  overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0;",
       "}",
-      "@keyframes ai-widget-bubble-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }",
+      "@keyframes ai-widget-bubble-in { from { opacity: 0; transform: translateY(6px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }",
       "@keyframes ai-widget-bounce { 0%, 60%, 100% { transform: translateY(0); opacity: 0.35; } 30% { transform: translateY(-4px); opacity: 1; } }",
       "@keyframes ai-widget-blink { 50% { opacity: 0; } }",
       "@keyframes ai-widget-spin { to { transform: rotate(360deg); } }",
       "@keyframes ai-widget-shake { 25% { transform: translateX(-3px); } 75% { transform: translateX(3px); } }",
+      "@keyframes ai-widget-morph-in { from { opacity: 0.3; } to { opacity: 1; } }",
       "@media (prefers-reduced-motion: reduce) {",
       "  .ai-widget-bubble { animation: none; }",
       "  .ai-widget-typing-dots span { animation: none; opacity: 0.7; }",
       "  .ai-widget-cursor { animation: none; opacity: 0.6; }",
       "  .ai-widget-send.error { animation: none; }",
       "  .ai-widget-send.sending .ai-widget-send-spinner { animation: none; }",
+      "  .ai-widget-morph { animation: none; }",
       "  .ai-widget-body { scroll-behavior: auto; }",
       "}",
     ].join("\\n");
@@ -961,7 +1174,23 @@ export const WIDGET_SDK_SOURCE = `(function () {
 
     var header = document.createElement("div");
     header.className = "ai-widget-header";
-    header.textContent = config.name;
+    var headerTitle = document.createElement("div");
+    headerTitle.className = "ai-widget-header-title";
+    headerTitle.textContent = config.name;
+    header.appendChild(headerTitle);
+    // Minimal presence line (module spec: "Keep the header minimal") — a
+    // static "Online" indicator, not a claim tied to live agent
+    // availability or business hours (the public widget config doesn't
+    // expose either), since this widget always responds, including via the
+    // configured offline/handoff message outside business hours.
+    var headerStatus = document.createElement("div");
+    headerStatus.className = "ai-widget-header-status";
+    var statusDot = document.createElement("span");
+    statusDot.className = "ai-widget-status-dot";
+    statusDot.setAttribute("aria-hidden", "true");
+    headerStatus.appendChild(statusDot);
+    headerStatus.appendChild(document.createTextNode("Online"));
+    header.appendChild(headerStatus);
     panel.appendChild(header);
 
     var body = document.createElement("div");
@@ -1006,6 +1235,11 @@ export const WIDGET_SDK_SOURCE = `(function () {
         suggested.appendChild(button);
       });
       body.appendChild(suggested);
+      // Only meaningful for a first-time visitor with nothing to reply to
+      // yet — sendMessage removes this the moment the visitor sends their
+      // own first message, and the session-restore branch below removes it
+      // immediately for a returning visitor who already has a thread.
+      elements.suggestedContainer = suggested;
     }
     body.appendChild(messages);
     panel.appendChild(body);
@@ -1115,6 +1349,13 @@ export const WIDGET_SDK_SOURCE = `(function () {
     var session = loadSession();
     if (session) {
       if (session.conversationId) {
+        // A returning visitor with an active thread isn't a "first-time"
+        // visitor — the quick-suggestion chips only make sense before any
+        // conversation exists.
+        if (elements.suggestedContainer && elements.suggestedContainer.parentNode) {
+          elements.suggestedContainer.parentNode.removeChild(elements.suggestedContainer);
+          elements.suggestedContainer = null;
+        }
         state.conversationId = session.conversationId;
         savedScrollTop = typeof session.scrollTop === "number" ? session.scrollTop : null;
         restoreHistory(elements, config, session.conversationId, function (succeeded) {
