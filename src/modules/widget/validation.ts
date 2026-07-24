@@ -88,6 +88,10 @@ export const updateBehaviourSchema = z.object({
   showPoweredBy: z.boolean().optional(),
   autoOpen: z.boolean().optional(),
   autoOpenDelaySeconds: z.number().int().min(0).max(120).optional(),
+  // 5 minutes to 30 days — how long the embed SDK keeps reusing one
+  // conversation across page navigation/refresh before starting a fresh
+  // thread. Bounds are a sanity check on the input, not a technical limit.
+  sessionTimeoutMinutes: z.number().int().min(5).max(43200).optional(),
 });
 export type UpdateBehaviourInput = z.infer<typeof updateBehaviourSchema>;
 

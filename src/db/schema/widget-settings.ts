@@ -21,6 +21,13 @@ export const widgetSettings = pgTable("widget_settings", {
   showPoweredBy: boolean("show_powered_by").notNull().default(true),
   autoOpen: boolean("auto_open").notNull().default(false),
   autoOpenDelaySeconds: integer("auto_open_delay_seconds").notNull().default(5),
+  // How long the embed SDK keeps reusing one conversation across page
+  // navigation/refresh before starting a fresh thread (module spec:
+  // "configurable duration, e.g. 24 hours") — purely a client-side
+  // persistence TTL read by modules/widget/sdk-source.ts; conversation_sessions
+  // itself never expires server-side (session-service.ts always reactivates
+  // an existing session for a returning visitorId).
+  sessionTimeoutMinutes: integer("session_timeout_minutes").notNull().default(1440),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

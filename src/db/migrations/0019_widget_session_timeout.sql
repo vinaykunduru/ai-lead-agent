@@ -1,0 +1,1 @@
+ALTER TABLE "widget_settings" ADD COLUMN "session_timeout_minutes" integer DEFAULT 1440 NOT NULL;

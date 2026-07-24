@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { UpdateBehaviourInput } from "@/modules/widget/validation";
 import type { WidgetSettings } from "@/db/schema";
@@ -16,6 +17,15 @@ import type { WidgetSettings } from "@/db/schema";
 type FormValues = Omit<UpdateBehaviourInput, "suggestedQuestions"> & {
   suggestedQuestions: { value: string }[];
 };
+
+const SESSION_TIMEOUT_PRESETS = [
+  { label: "1 hour", minutes: 60 },
+  { label: "4 hours", minutes: 240 },
+  { label: "24 hours", minutes: 1440 },
+  { label: "3 days", minutes: 4320 },
+  { label: "7 days", minutes: 10080 },
+  { label: "30 days", minutes: 43200 },
+] as const;
 
 export function BehaviourForm({
   widgetId,
@@ -54,6 +64,7 @@ export function BehaviourForm({
       showPoweredBy: settings.showPoweredBy,
       autoOpen: settings.autoOpen,
       autoOpenDelaySeconds: settings.autoOpenDelaySeconds,
+      sessionTimeoutMinutes: settings.sessionTimeoutMinutes,
     },
   });
 
@@ -116,6 +127,28 @@ export function BehaviourForm({
           <div className="space-y-2">
             <Label htmlFor="offlineMessage">Offline message</Label>
             <Textarea id="offlineMessage" rows={2} disabled={!canUpdate} {...register("offlineMessage")} />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="sessionTimeoutMinutes">Conversation persistence</Label>
+            <Select
+              value={String(watch("sessionTimeoutMinutes") ?? 1440)}
+              onValueChange={(v) => v && setValue("sessionTimeoutMinutes", Number(v), { shouldDirty: true })}
+              disabled={!canUpdate}
+            >
+              <SelectTrigger id="sessionTimeoutMinutes" className="w-48"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {SESSION_TIMEOUT_PRESETS.map((preset) => (
+                  <SelectItem key={preset.minutes} value={String(preset.minutes)}>
+                    {preset.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-caption text-muted-foreground">
+              How long a visitor&apos;s conversation keeps going across page navigation and browser refresh before
+              a new one starts.
+            </p>
           </div>
 
           <div className="space-y-3">

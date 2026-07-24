@@ -118,6 +118,12 @@ describe("updateBehaviourSchema", () => {
     expect(updateBehaviourSchema.safeParse({ autoOpenDelaySeconds: 121 }).success).toBe(false);
     expect(updateBehaviourSchema.safeParse({ autoOpenDelaySeconds: 5 }).success).toBe(true);
   });
+
+  it("enforces session timeout bounds (5 minutes to 30 days)", () => {
+    expect(updateBehaviourSchema.safeParse({ sessionTimeoutMinutes: 4 }).success).toBe(false);
+    expect(updateBehaviourSchema.safeParse({ sessionTimeoutMinutes: 43201 }).success).toBe(false);
+    expect(updateBehaviourSchema.safeParse({ sessionTimeoutMinutes: 1440 }).success).toBe(true);
+  });
 });
 
 describe("publicWidgetConfigQuerySchema", () => {

@@ -10,8 +10,9 @@
  * (module spec §12: "Only replace the mocked transport with the real
  * conversation client" — theme/appearance/configuration/installation are
  * all untouched from the Widget Platform milestone). It never calls an AI
- * provider directly, never stores anything beyond a local visitor id, and
- * never opens a WebSocket — SSE-framed text over a POST fetch only.
+ * provider directly, never stores anything beyond a local visitor id and a
+ * small conversation-session pointer (see below), and never opens a
+ * WebSocket — SSE-framed text over a POST fetch only.
  *
  * A native `EventSource` can't be used here because it only supports GET
  * requests; this reads `response.body` as a stream and parses the same
@@ -31,6 +32,33 @@
  * spec §6 "Human Takeover") actually reaches the visitor. This is a
  * separate, plain GET+JSON endpoint — not a WebSocket, not a change to the
  * SSE transport or the streaming execution pipeline.
+ *
+ * As of the conversation-persistence fix: a small session object
+ * (conversationId, draft text, panel-open state, a sliding expiresAt —
+ * never message content) is written to localStorage under
+ * `ai_widget_session_<publicKey>` on every state change and read back on
+ * every page load, so navigating between pages on the same site — or
+ * refreshing — resumes the same conversation instead of starting a new one
+ * every time (see getSessionStorageKey/loadSession/saveSession/
+ * restoreHistory/handleStorageSync below). The server side of this was
+ * already correct: session-service.ts's resolveSession always reuses the
+ * existing conversation_sessions row for a returning visitorId, and
+ * resolveConversation silently starts a fresh thread for a missing, stale,
+ * or foreign conversationId rather than erroring — this fix is entirely
+ * about the *client* actually remembering and resending the conversationId
+ * it already has a right to reuse.
+ *
+ * As of the persistence UX-polish pass: the same session object also
+ * carries `scrollTop` (restored once history re-renders, so a visitor who
+ * had scrolled up to read stays there instead of snapping to the bottom)
+ * and `pendingSince` (set while a reply is in flight, cleared once it
+ * resolves — see maybeResumePendingResponse). A small "welcome back"
+ * banner and a Web Locks–coordinated first message (falling back to the
+ * existing storage-event adoption when the API is unavailable) round this
+ * out — see showWelcomeBackBanner/sendMessageCoordinated below. None of
+ * this changes the server-side session flow or the Visitor Profile
+ * pipeline; it is purely how the already-approved persisted session is
+ * presented and coordinated client-side.
  */
 export const WIDGET_SDK_SOURCE = `(function () {
   "use strict";
@@ -47,10 +75,29 @@ export const WIDGET_SDK_SOURCE = `(function () {
   var scriptUrl = new URL(currentScript.src, window.location.href);
   var apiBase = scriptUrl.origin;
 
-  var state = { conversationId: null, sending: false, lastMessageAt: null, seenMessageIds: {} };
+  var state = {
+    conversationId: null,
+    sending: false,
+    lastMessageAt: null,
+    // Assistant-only, unlike lastMessageAt (every role) — the visitor's own
+    // just-sent message is always present and always newer than the moment
+    // it was sent, so maybeResumePendingResponse needs a signal that can't
+    // be satisfied by the visitor's own echoed-back message.
+    lastAssistantMessageAt: null,
+    seenMessageIds: {},
+  };
   var fallbackVisitorId = null;
   var pollTimer = null;
   var POLL_INTERVAL_MS = 4000;
+  // How long a reply is allowed to stay "pending" after a page restore
+  // before the widget gives up waiting and shows a failure state instead
+  // of an indicator that never resolves (module spec: "or the request
+  // times out").
+  var PENDING_TIMEOUT_MS = 45000;
+  // Within this many px of the bottom counts as "already reading the
+  // latest message" for auto-scroll purposes — matches the everyday
+  // chat-app definition of "near bottom" (ChatGPT, Slack, etc.).
+  var NEAR_BOTTOM_PX = 80;
 
   function fallbackUuid() {
     return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function (c) {
@@ -83,6 +130,91 @@ export const WIDGET_SDK_SOURCE = `(function () {
     }
   }
 
+  function debounce(fn, wait) {
+    var timer = null;
+    return function () {
+      var args = arguments;
+      window.clearTimeout(timer);
+      timer = window.setTimeout(function () {
+        fn.apply(null, args);
+      }, wait);
+    };
+  }
+
+  function isNearBottom(container) {
+    return container.scrollHeight - container.scrollTop - container.clientHeight < NEAR_BOTTOM_PX;
+  }
+
+  function scrollToBottom(container) {
+    container.scrollTop = container.scrollHeight;
+  }
+
+  // The per-widget-key persisted session — conversationId, draft text, and
+  // panel-open state — is what lets the widget survive a full page
+  // navigation or refresh instead of starting a blank conversation every
+  // time (module spec: "The AI conversation must persist across page
+  // navigation"). Deliberately does NOT cache message content: history is
+  // always re-fetched from the server on restore (readSseStream/
+  // restoreHistory below), so this stays a small, cheap-to-write pointer
+  // rather than a second, driftable copy of the transcript.
+  function getSessionStorageKey() {
+    return "ai_widget_session_" + publicKey;
+  }
+
+  function loadSession() {
+    try {
+      var raw = window.localStorage.getItem(getSessionStorageKey());
+      if (!raw) return null;
+      var parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== "object") return null;
+      // Sliding expiration: a valid session is one still inside its
+      // configurable window (module spec: "configurable duration, e.g. 24
+      // hours") as of the last time it was written — every write refreshes
+      // expiresAt, so active use keeps extending it.
+      if (!parsed.expiresAt || new Date(parsed.expiresAt).getTime() <= Date.now()) {
+        window.localStorage.removeItem(getSessionStorageKey());
+        return null;
+      }
+      return parsed;
+    } catch (e) {
+      // Storage unavailable (privacy mode, etc.) — no persisted session,
+      // same as a first-time visitor; every other feature still works for
+      // the current page load.
+      return null;
+    }
+  }
+
+  function saveSession(config, patch) {
+    try {
+      var existing = loadSession() || {};
+      var timeoutMinutes =
+        (config && config.behaviour && config.behaviour.sessionTimeoutMinutes) || 1440;
+      var merged = {
+        conversationId: patch.conversationId !== undefined ? patch.conversationId : existing.conversationId || null,
+        draft: patch.draft !== undefined ? patch.draft : existing.draft || "",
+        panelOpen: patch.panelOpen !== undefined ? patch.panelOpen : existing.panelOpen || false,
+        // Reading position within the transcript — null (not 0) means
+        // "never recorded," distinct from a visitor who genuinely scrolled
+        // all the way to the top, which is a legitimate 0.
+        scrollTop:
+          patch.scrollTop !== undefined
+            ? patch.scrollTop
+            : existing.scrollTop !== undefined
+              ? existing.scrollTop
+              : null,
+        // Set while a reply is in flight, cleared the moment it resolves —
+        // lets a later page load know to resume waiting rather than sit
+        // idle (see maybeResumePendingResponse).
+        pendingSince: patch.pendingSince !== undefined ? patch.pendingSince : existing.pendingSince || null,
+        expiresAt: new Date(Date.now() + timeoutMinutes * 60000).toISOString(),
+      };
+      window.localStorage.setItem(getSessionStorageKey(), JSON.stringify(merged));
+    } catch (e) {
+      // Nothing to fall back to — the conversation still works for this
+      // page load, it just won't survive navigation in this browser.
+    }
+  }
+
   function applyTheme(host, appearance) {
     host.style.setProperty("--ai-widget-primary", appearance.primaryColor);
     host.style.setProperty("--ai-widget-accent", appearance.accentColor);
@@ -100,7 +232,7 @@ export const WIDGET_SDK_SOURCE = `(function () {
     host.style.zIndex = "2147483000";
   }
 
-  function appendBubble(container, role, config) {
+  function appendBubble(container, role, config, timestamp) {
     var bubble = document.createElement("div");
     bubble.className = "ai-widget-bubble ai-widget-bubble-" + role;
 
@@ -111,7 +243,7 @@ export const WIDGET_SDK_SOURCE = `(function () {
     if (config.behaviour.showTimestamp) {
       var time = document.createElement("span");
       time.className = "ai-widget-bubble-time";
-      time.textContent = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      time.textContent = (timestamp || new Date()).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
       bubble.appendChild(time);
     }
 
@@ -256,10 +388,12 @@ export const WIDGET_SDK_SOURCE = `(function () {
     if (!trimmed || state.sending) return;
     state.sending = true;
     elements.input.value = "";
+    saveSession(config, { draft: "", pendingSince: new Date().toISOString() });
     elements.sendButton.disabled = true;
 
     appendBubble(elements.messages, "user", config).textEl.textContent = trimmed;
     var assistant = appendBubble(elements.messages, "assistant", config);
+    scrollToBottom(elements.scrollContainer);
     if (config.behaviour.showTypingIndicator) {
       assistant.root.classList.add("ai-widget-typing");
     }
@@ -280,11 +414,12 @@ export const WIDGET_SDK_SOURCE = `(function () {
         return readSseStream(response.body, function (event) {
           if (event.type === "ready") {
             state.conversationId = event.conversationId;
+            saveSession(config, { conversationId: state.conversationId });
           } else if (event.type === "token") {
             assistant.root.classList.remove("ai-widget-typing");
             assistant.raw += event.text;
             renderAssistantText(assistant.textEl, assistant.raw);
-            elements.messages.scrollTop = elements.messages.scrollHeight;
+            scrollToBottom(elements.scrollContainer);
           } else if (event.type === "handoff") {
             assistant.root.classList.remove("ai-widget-typing");
             assistant.raw = event.message;
@@ -318,9 +453,82 @@ export const WIDGET_SDK_SOURCE = `(function () {
         // the id in state.seenMessageIds) actually reaches the browser,
         // rendering the same reply a second time.
         startPolling(elements, config);
+        saveSession(config, { conversationId: state.conversationId, pendingSince: null });
         state.sending = false;
         elements.sendButton.disabled = false;
       });
+  }
+
+  // Coordinates the *first* message of a fresh conversation across
+  // multiple tabs (module spec: "Never create duplicate conversations for
+  // the same visitor during simultaneous first messages"). Every message
+  // after the first already carries state.conversationId, so there is
+  // nothing to coordinate — this only ever wraps the one call that would
+  // otherwise race. sendMessage itself is untouched; this only decides
+  // *when* to call it.
+  function sendMessageCoordinated(text, elements, config) {
+    var trimmed = (text || "").trim();
+    if (!trimmed || state.sending) return;
+
+    if (state.conversationId || !(window.navigator && window.navigator.locks && window.navigator.locks.request)) {
+      sendMessage(text, elements, config);
+      return;
+    }
+
+    window.navigator.locks
+      .request(
+        "ai-widget-first-message-" + publicKey,
+        { ifAvailable: true },
+        function (lock) {
+          if (!lock) {
+            // Another tab already claimed the first message for this
+            // visitor — adopt its conversation id (handleStorageSync writes
+            // it within a few hundred ms of the server's "ready" event)
+            // instead of racing to create a second conversation, then
+            // continue this tab's own message onto that same thread.
+            return waitForConversationId().then(function () {
+              sendMessage(text, elements, config);
+            });
+          }
+          // Won the race: send now. The lock is held until the promise
+          // below resolves — i.e. until this tab's own conversation id
+          // comes back (or a short timeout elapses) — so a second tab's
+          // {ifAvailable} check in that brief window correctly sees "taken"
+          // rather than racing in and creating its own conversation.
+          sendMessage(text, elements, config);
+          return waitForConversationId();
+        },
+      )
+      .catch(function () {
+        // The API existed but the request itself failed (e.g. a
+        // Permissions-Policy blocking web-locks in an embedded iframe) —
+        // sendMessage's own state.sending guard makes this a safe no-op if
+        // the callback above already started it; if the rejection happened
+        // before the callback ever ran, this is the only thing standing
+        // between the visitor and a silently dropped first message.
+        sendMessage(text, elements, config);
+      });
+  }
+
+  // Lightweight in-memory/localStorage poll (no network requests) used
+  // only by the losing side of the first-message race above — bounded to
+  // 2s so a visitor's own message is never stuck waiting indefinitely if
+  // the winning tab's request fails outright.
+  function waitForConversationId() {
+    return new Promise(function (resolve) {
+      var attempts = 0;
+      var timer = setInterval(function () {
+        attempts++;
+        if (!state.conversationId) {
+          var session = loadSession();
+          if (session && session.conversationId) state.conversationId = session.conversationId;
+        }
+        if (state.conversationId || attempts >= 20) {
+          clearInterval(timer);
+          resolve();
+        }
+      }, 100);
+    });
   }
 
   // Picks up replies the widget didn't already render itself — chiefly a
@@ -355,20 +563,174 @@ export const WIDGET_SDK_SOURCE = `(function () {
           return response.ok ? response.json() : { messages: [] };
         })
         .then(function (data) {
-          (data.messages || []).forEach(function (message) {
+          var incoming = data.messages || [];
+          if (incoming.length === 0) return;
+          // Measured before appending: a visitor already reading older
+          // messages should never get yanked to the bottom by a reply
+          // that arrived while they were scrolled up (module spec: "If
+          // new messages arrive while restoring/reading, automatically
+          // scroll to the latest message only if the user was already
+          // near the bottom. Otherwise preserve the user's reading
+          // position").
+          var wasNearBottom = isNearBottom(elements.scrollContainer);
+          incoming.forEach(function (message) {
             state.lastMessageAt = message.createdAt;
             if (state.seenMessageIds[message.id]) return;
             state.seenMessageIds[message.id] = true;
             if (message.role === "assistant") {
+              state.lastAssistantMessageAt = message.createdAt;
               renderAssistantText(appendBubble(elements.messages, "assistant", config).textEl, message.content);
             }
           });
+          if (wasNearBottom) scrollToBottom(elements.scrollContainer);
         })
         .catch(function () {
           // A failed poll just tries again next interval — never surfaces
           // as a visible error for a background refresh.
         });
     }, POLL_INTERVAL_MS);
+  }
+
+  // Re-renders a previously-started conversation's full transcript on a
+  // fresh page load (module spec: "Automatically restore previous
+  // messages... The user should never notice that the page changed").
+  // Always re-fetches from the server rather than trusting anything cached
+  // client-side, since the server (and the visitor-profile pipeline that
+  // reads from it) is the single source of truth. Once restored, polling
+  // starts immediately — not gated behind the visitor sending a first
+  // message on this page — so a reply sent from another tab or the human
+  // Inbox while this page was loading still shows up.
+  //
+  // onRendered(succeeded), if given, fires once messages have been
+  // appended (or the fetch failed) — the one hook point the init-restore
+  // flow needs for scroll restoration and the welcome-back banner, kept
+  // out of this function itself so handleStorageSync's cross-tab restore
+  // (a different situation — "another tab told me about a conversation,"
+  // not "I am resuming my own") can keep calling this without either of
+  // those extras.
+  function restoreHistory(elements, config, conversationId, onRendered) {
+    var url =
+      apiBase + "/api/widget/conversations/" + conversationId + "/messages?key=" + encodeURIComponent(publicKey);
+
+    return fetch(url, { credentials: "omit" })
+      .then(function (response) {
+        return response.ok ? response.json() : { messages: [] };
+      })
+      .then(function (data) {
+        (data.messages || []).forEach(function (message) {
+          state.lastMessageAt = message.createdAt;
+          if (state.seenMessageIds[message.id]) return;
+          state.seenMessageIds[message.id] = true;
+          var bubble = appendBubble(elements.messages, message.role, config, new Date(message.createdAt));
+          if (message.role === "assistant") {
+            state.lastAssistantMessageAt = message.createdAt;
+            renderAssistantText(bubble.textEl, message.content);
+          } else {
+            bubble.textEl.textContent = message.content;
+          }
+        });
+        startPolling(elements, config);
+        if (onRendered) onRendered(true);
+        return { ok: true };
+      })
+      .catch(function () {
+        // The conversationId itself is still valid server-side even if this
+        // one fetch failed (offline, transient network error) — the next
+        // message the visitor sends still continues the same thread rather
+        // than silently forking a new one; this page view just starts
+        // without visible history. Graceful fallback: scroll to the
+        // (empty) bottom rather than leaving a half-restored scroll state.
+        scrollToBottom(elements.scrollContainer);
+        startPolling(elements, config);
+        if (onRendered) onRendered(false);
+        return { ok: false };
+      });
+  }
+
+  // Resumes waiting for a reply that was still generating when the
+  // visitor navigated away or refreshed (module spec: "the widget should
+  // not appear idle... Continue polling until the response arrives or the
+  // request times out... Do not send the prompt again"). Never issues a
+  // new POST — the message was already recorded server-side by the page
+  // that originally sent it; this only shows the same typing indicator a
+  // live turn uses and leans on the polling restoreHistory already
+  // started to notice when the reply (or a timeout) resolves it.
+  function maybeResumePendingResponse(elements, config, pendingSince) {
+    var pendingTime = new Date(pendingSince).getTime();
+    // Deliberately the assistant-only timestamp, not lastMessageAt — the
+    // visitor's own message (which triggered this pendingSince in the
+    // first place) is always present and always at-or-after pendingTime,
+    // so comparing against "any message" would treat every pending reply
+    // as already resolved and never show the resumed typing indicator.
+    var lastKnownAssistantTime = state.lastAssistantMessageAt ? new Date(state.lastAssistantMessageAt).getTime() : 0;
+    if (lastKnownAssistantTime >= pendingTime) {
+      // The reply already arrived and was just rendered by restoreHistory
+      // above — nothing left to wait for.
+      saveSession(config, { pendingSince: null });
+      return;
+    }
+
+    var elapsedMs = Date.now() - pendingTime;
+    if (elapsedMs >= PENDING_TIMEOUT_MS) {
+      saveSession(config, { pendingSince: null });
+      return;
+    }
+
+    var typingBubble = appendBubble(elements.messages, "assistant", config);
+    typingBubble.root.classList.add("ai-widget-typing");
+    scrollToBottom(elements.scrollContainer);
+
+    var seenCountAtStart = Object.keys(state.seenMessageIds).length;
+    var deadline = Date.now() + (PENDING_TIMEOUT_MS - elapsedMs);
+
+    var watcher = setInterval(function () {
+      if (Object.keys(state.seenMessageIds).length > seenCountAtStart) {
+        clearInterval(watcher);
+        if (typingBubble.root.parentNode) typingBubble.root.parentNode.removeChild(typingBubble.root);
+        saveSession(config, { pendingSince: null });
+        return;
+      }
+      if (Date.now() >= deadline) {
+        clearInterval(watcher);
+        typingBubble.root.classList.remove("ai-widget-typing");
+        typingBubble.root.classList.add("ai-widget-error");
+        typingBubble.textEl.textContent =
+          config.behaviour.offlineMessage || "This response could not be completed. Please try again.";
+        saveSession(config, { pendingSince: null });
+      }
+    }, 1000);
+  }
+
+  function showWelcomeBackBanner(elements) {
+    var banner = elements.restoreBanner;
+    if (!banner) return;
+    banner.classList.add("visible");
+    setTimeout(function () {
+      banner.classList.remove("visible");
+    }, 3000);
+  }
+
+  // Cross-tab sync (module spec: "Handle multiple browser tabs gracefully
+  // ... If another tab updates the conversation, synchronize the widget
+  // state"). The "storage" event fires in every OTHER same-origin tab, never the one
+  // that made the write, so this only ever adopts a conversation this tab
+  // doesn't already have — a tab that already owns a thread keeps showing
+  // it rather than switching away mid-conversation.
+  function handleStorageSync(elements, config) {
+    window.addEventListener("storage", function (event) {
+      if (event.key !== getSessionStorageKey() || !event.newValue || state.conversationId) return;
+      var incoming;
+      try {
+        incoming = JSON.parse(event.newValue);
+      } catch (e) {
+        return;
+      }
+      if (!incoming || !incoming.conversationId) return;
+      if (incoming.expiresAt && new Date(incoming.expiresAt).getTime() <= Date.now()) return;
+
+      state.conversationId = incoming.conversationId;
+      restoreHistory(elements, config, incoming.conversationId);
+    });
   }
 
   function renderShell(container, config) {
@@ -394,7 +756,16 @@ export const WIDGET_SDK_SOURCE = `(function () {
       "}",
       ".ai-widget-panel.open { display: flex; }",
       ".ai-widget-header { background: var(--ai-widget-primary); color: #fff; padding: 16px; font-weight: 600; }",
-      ".ai-widget-body { flex: 1; padding: 16px; overflow-y: auto; color: #111; font-size: 14px; }",
+      ".ai-widget-body { position: relative; flex: 1; padding: 16px; overflow-y: auto; color: #111; font-size: 14px; }",
+      ".ai-widget-restore-banner {",
+      "  position: absolute; top: 8px; left: 8px; right: 8px; z-index: 1;",
+      "  display: flex; align-items: center; justify-content: center;",
+      "  padding: 6px 10px; border-radius: 999px; font-size: 11px; font-weight: 600;",
+      "  background: var(--ai-widget-primary); color: #fff; text-align: center;",
+      "  opacity: 0; transform: translateY(-8px); pointer-events: none;",
+      "  transition: opacity 0.25s ease, transform 0.25s ease;",
+      "}",
+      ".ai-widget-restore-banner.visible { opacity: 0.95; transform: translateY(0); }",
       ".ai-widget-suggested { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }",
       ".ai-widget-suggested button {",
       "  border: 1px solid var(--ai-widget-accent); color: var(--ai-widget-accent);",
@@ -444,13 +815,21 @@ export const WIDGET_SDK_SOURCE = `(function () {
 
     var body = document.createElement("div");
     body.className = "ai-widget-body";
+
+    var restoreBanner = document.createElement("div");
+    restoreBanner.className = "ai-widget-restore-banner";
+    restoreBanner.setAttribute("role", "status");
+    restoreBanner.setAttribute("aria-live", "polite");
+    restoreBanner.textContent = "Welcome back! Continue where you left off.";
+    body.appendChild(restoreBanner);
+
     var welcome = document.createElement("p");
     welcome.textContent = config.behaviour.welcomeMessage || "Hi! How can we help?";
     body.appendChild(welcome);
 
     var messages = document.createElement("div");
     messages.className = "ai-widget-messages";
-    var elements = { messages: messages };
+    var elements = { messages: messages, scrollContainer: body, restoreBanner: restoreBanner };
 
     if (config.behaviour.suggestedQuestions && config.behaviour.suggestedQuestions.length) {
       var suggested = document.createElement("div");
@@ -460,7 +839,7 @@ export const WIDGET_SDK_SOURCE = `(function () {
         button.type = "button";
         button.textContent = question;
         button.addEventListener("click", function () {
-          sendMessage(question, elements, config);
+          sendMessageCoordinated(question, elements, config);
         });
         suggested.appendChild(button);
       });
@@ -487,14 +866,33 @@ export const WIDGET_SDK_SOURCE = `(function () {
     elements.sendButton = sendButton;
 
     sendButton.addEventListener("click", function () {
-      sendMessage(input.value, elements, config);
+      sendMessageCoordinated(input.value, elements, config);
     });
     input.addEventListener("keydown", function (event) {
       if (event.key === "Enter") {
         event.preventDefault();
-        sendMessage(input.value, elements, config);
+        sendMessageCoordinated(input.value, elements, config);
       }
     });
+    // A draft the visitor was mid-way through typing survives navigation
+    // too (module spec: "Draft message (if applicable)") — debounced so
+    // every keystroke doesn't hit localStorage.
+    input.addEventListener(
+      "input",
+      debounce(function () {
+        saveSession(config, { draft: input.value });
+      }, 400),
+    );
+
+    // Reading position within the transcript (module spec: "Save scroll
+    // position whenever the conversation scrolls") — debounced for the
+    // same reason the draft listener is.
+    body.addEventListener(
+      "scroll",
+      debounce(function () {
+        saveSession(config, { scrollTop: body.scrollTop });
+      }, 150),
+    );
 
     if (config.behaviour.showPoweredBy) {
       var footer = document.createElement("div");
@@ -508,8 +906,28 @@ export const WIDGET_SDK_SOURCE = `(function () {
     launcher.className = "ai-widget-launcher";
     launcher.setAttribute("aria-label", "Open chat");
     launcher.textContent = "\\u{1F4AC}";
+    // Restoring the visitor's exact reading position (module spec:
+    // "Restore the scroll position after the conversation history has
+    // finished loading... Prevent jumpiness during restoration") needs
+    // both "history has rendered" and "the panel is actually visible" to
+    // be true — scrollTop set on a display:none subtree isn't reliable —
+    // so this applies once, whichever of those two happens last.
+    var savedScrollTop = null;
+    var scrollRestoreApplied = false;
+    function applyScrollRestoreIfReady() {
+      if (scrollRestoreApplied || !panel.classList.contains("open")) return;
+      scrollRestoreApplied = true;
+      if (savedScrollTop !== null) {
+        elements.scrollContainer.scrollTop = savedScrollTop;
+      } else {
+        scrollToBottom(elements.scrollContainer);
+      }
+    }
+
     launcher.addEventListener("click", function () {
       panel.classList.toggle("open");
+      saveSession(config, { panelOpen: panel.classList.contains("open") });
+      applyScrollRestoreIfReady();
     });
 
     root.appendChild(panel);
@@ -517,12 +935,47 @@ export const WIDGET_SDK_SOURCE = `(function () {
     shadow.appendChild(style);
     shadow.appendChild(root);
 
-    if (config.behaviour.autoOpen) {
+    // Restore a still-active session from an earlier page on this same
+    // site (module spec: "Automatically restore... The user should never
+    // notice that the page changed") — conversationId, message history,
+    // scroll position, draft text, in-flight typing state, and whether
+    // the panel was left open. A missing or expired session (loadSession
+    // returns null) falls through to the exact pre-existing fresh-visitor
+    // behavior below.
+    var restoredPanelOpen = false;
+    var session = loadSession();
+    if (session) {
+      if (session.conversationId) {
+        state.conversationId = session.conversationId;
+        savedScrollTop = typeof session.scrollTop === "number" ? session.scrollTop : null;
+        restoreHistory(elements, config, session.conversationId, function (succeeded) {
+          if (succeeded) {
+            applyScrollRestoreIfReady();
+            showWelcomeBackBanner(elements);
+            if (session.pendingSince) {
+              maybeResumePendingResponse(elements, config, session.pendingSince);
+            }
+          }
+        });
+      }
+      if (session.draft) {
+        input.value = session.draft;
+      }
+      if (session.panelOpen) {
+        panel.classList.add("open");
+        restoredPanelOpen = true;
+      }
+    }
+
+    if (config.behaviour.autoOpen && !restoredPanelOpen) {
       var delay = (config.behaviour.autoOpenDelaySeconds || 0) * 1000;
       setTimeout(function () {
         panel.classList.add("open");
+        applyScrollRestoreIfReady();
       }, delay);
     }
+
+    handleStorageSync(elements, config);
   }
 
   function mount(config) {

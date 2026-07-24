@@ -35,6 +35,7 @@ export type PublicWidgetConfig = {
     showPoweredBy: boolean;
     autoOpen: boolean;
     autoOpenDelaySeconds: number;
+    sessionTimeoutMinutes: number;
   };
 };
 
@@ -98,6 +99,7 @@ export async function resolvePublicWidgetConfig(
       showPoweredBy: settings.showPoweredBy,
       autoOpen: settings.autoOpen,
       autoOpenDelaySeconds: settings.autoOpenDelaySeconds,
+      sessionTimeoutMinutes: settings.sessionTimeoutMinutes,
     },
   };
 }
