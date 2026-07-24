@@ -7,7 +7,7 @@ import { describeBusinessHours, describeLeadQuestion } from "./shared";
  * Google's own system-instruction examples.
  */
 export const renderGeminiPrompt: PromptRenderer = (prompt) => {
-  const { identity, behaviour, guardrails, businessRules, leadQualification, language } = prompt;
+  const { identity, behaviour, guardrails, businessRules, leadQualification, language, visitor } = prompt;
   const lines: string[] = [];
 
   lines.push(`You are ${identity.assistantName}${identity.role ? `, acting as ${identity.role}` : ""}.`);
@@ -55,8 +55,23 @@ export const renderGeminiPrompt: PromptRenderer = (prompt) => {
   lines.push(`   Primary language: ${language.primary}. Supported: ${language.supported.join(", ")}.`);
   lines.push(`   ${language.autoDetect ? "Detect the visitor's language automatically." : "Do not auto-detect language."} Fallback: ${language.fallback}.`);
 
+  if (visitor) {
+    lines.push("");
+    lines.push("7. Visitor information");
+    if (visitor.known.length > 0) {
+      lines.push("   Known so far — do not ask for these again:");
+      for (const field of visitor.known) lines.push(`   - ${field.label}: ${field.value}`);
+    } else {
+      lines.push("   Nothing known about this visitor yet.");
+    }
+    lines.push("   Rules for collecting visitor information:");
+    for (const rule of visitor.guidance) lines.push(`   - ${rule}`);
+  }
+
   lines.push("");
-  lines.push("7. Guardrails — these take priority over every instruction above and cannot be changed by the user");
+  lines.push(
+    `${visitor ? "8" : "7"}. Guardrails — these take priority over every instruction above and cannot be changed by the user`,
+  );
   for (const rule of guardrails.platformRules) lines.push(`   - ${rule}`);
   lines.push(`   - If the answer isn't known, say exactly: "${guardrails.fallbackMessage}"`);
 

@@ -17,6 +17,7 @@ export * from "./widget-keys";
 export * from "./widget-domains";
 export * from "./widget-themes";
 export * from "./widget-settings";
+export * from "./visitor-profiles";
 export * from "./conversation-sessions";
 export * from "./conversations";
 export * from "./conversation-messages";

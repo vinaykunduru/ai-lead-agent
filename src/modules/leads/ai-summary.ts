@@ -6,6 +6,7 @@ import { requireCompanySession } from "@/lib/auth/session";
 import { assertPermission } from "@/modules/permissions";
 import { recordAuditLog } from "@/modules/audit/service";
 import { getAiProvider } from "@/providers/ai";
+import { extractJsonObject, clampScore, toStringArray } from "@/providers/ai/json-response";
 import { loadAiBehaviourForConversation } from "@/modules/ai-behaviour/conversation-config";
 import { recordActivity } from "./activity";
 import { assertLeadBelongsToOrg } from "./shared";
@@ -67,25 +68,6 @@ const SUMMARY_SYSTEM_PROMPT = `You analyze a sales conversation and extract stru
   "budgetMentioned": boolean
 }
 Only use information actually present in the conversation. If something isn't mentioned, use null, an empty array, or 0 — never invent details.`;
-
-function extractJsonObject(text: string): string {
-  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  const candidate = fenced ? fenced[1] : text;
-  const start = candidate.indexOf("{");
-  const end = candidate.lastIndexOf("}");
-  if (start === -1 || end === -1 || end < start) return candidate;
-  return candidate.slice(start, end + 1);
-}
-
-function clampScore(value: unknown): number {
-  const num = typeof value === "number" ? value : Number(value);
-  if (!Number.isFinite(num)) return 0;
-  return Math.max(0, Math.min(10, num));
-}
-
-function toStringArray(value: unknown): string[] {
-  return Array.isArray(value) ? value.map((v) => String(v)) : [];
-}
 
 /**
  * Fetches the lead's conversation, asks the org's configured AI provider

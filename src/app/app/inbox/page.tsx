@@ -56,6 +56,10 @@ export default async function InboxPage({
               <TableHeader>
                 <TableRow>
                   <TableHead>Widget</TableHead>
+                  <TableHead>Visitor</TableHead>
+                  <TableHead>Company</TableHead>
+                  <TableHead>Phone</TableHead>
+                  <TableHead>Lead score</TableHead>
                   <TableHead>Owner</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Assigned</TableHead>
@@ -72,6 +76,30 @@ export default async function InboxPage({
                           {unread ? <span className="size-1.5 shrink-0 rounded-full bg-primary" /> : null}
                           {conversation.widgetName}
                         </Link>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {conversation.visitorName ?? <span className="italic">Unknown</span>}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">{conversation.visitorCompany ?? "—"}</TableCell>
+                      <TableCell className="text-muted-foreground">{conversation.visitorPhone ?? "—"}</TableCell>
+                      <TableCell>
+                        {conversation.leadScore !== null ? (
+                          <div className="flex items-center gap-1.5">
+                            <Badge
+                              variant={
+                                conversation.leadQualificationStatus === "hot"
+                                  ? "destructive"
+                                  : conversation.leadQualificationStatus === "warm"
+                                    ? "warning"
+                                    : "secondary"
+                              }
+                            >
+                              {conversation.leadScore}
+                            </Badge>
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
                       </TableCell>
                       <TableCell>
                         <Badge variant={conversation.owner === "human" ? "secondary" : "outline"} className="capitalize">

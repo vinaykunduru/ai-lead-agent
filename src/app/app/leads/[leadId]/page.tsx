@@ -11,6 +11,8 @@ import { listNotes } from "@/modules/leads/notes-service";
 import { getLeadTimeline } from "@/modules/leads/timeline-service";
 import { listAssignableTeamMembers } from "@/modules/organizations/team-members";
 import { getConversationDetail } from "@/modules/conversation/inspector-service";
+import { getVisitorProfile } from "@/modules/visitor-profiles/service";
+import { VisitorProfilePanel } from "@/shared/components/visitor-profile-panel";
 import { LeadDetailActions } from "./lead-detail-actions";
 import { LeadAiPanel } from "./lead-ai-panel";
 import { LeadTags } from "./lead-tags";
@@ -33,13 +35,14 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ lea
   const canViewConversation = can(session, "conversations.view");
   const canViewTeam = can(session, "users.view");
 
-  const [stages, tags, notes, activity, teamMembers, conversationDetail] = await Promise.all([
+  const [stages, tags, notes, activity, teamMembers, conversationDetail, visitorProfile] = await Promise.all([
     listStages(),
     listTags(leadId),
     listNotes(leadId),
     getLeadTimeline(leadId),
     canViewTeam ? listAssignableTeamMembers() : Promise.resolve([]),
     lead.conversationId && canViewConversation ? getConversationDetail(lead.conversationId) : Promise.resolve(null),
+    lead.visitorProfileId ? getVisitorProfile(lead.visitorProfileId) : Promise.resolve(null),
   ]);
 
   const permissions = {
@@ -54,8 +57,12 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ lea
         <BackLink href="/app/leads" label="Leads" />
       </div>
       <PageHeader
-        title={lead.name ?? lead.email ?? lead.phone ?? "Unnamed lead"}
-        description={[lead.company, lead.email, lead.phone].filter(Boolean).join(" · ") || undefined}
+        title={visitorProfile?.name ?? lead.name ?? lead.email ?? lead.phone ?? "Unnamed lead"}
+        description={
+          [visitorProfile?.company ?? lead.company, visitorProfile?.email ?? lead.email, visitorProfile?.phone ?? lead.phone]
+            .filter(Boolean)
+            .join(" · ") || undefined
+        }
       />
 
       <div className="grid grid-cols-1 gap-4 p-6 lg:grid-cols-[minmax(320px,2fr)_minmax(280px,1fr)]">
@@ -73,6 +80,9 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ lea
             canAssign={permissions.canAssign}
             canDelete={permissions.canDelete}
           />
+          {visitorProfile ? (
+            <VisitorProfilePanel profile={visitorProfile} viewHref={`/app/visitors/${visitorProfile.id}`} />
+          ) : null}
           <LeadTags leadId={leadId} initialTags={tags} canUpdate={permissions.canUpdate} />
           <LeadNotes leadId={leadId} initialNotes={notes} canUpdate={permissions.canUpdate} />
         </div>

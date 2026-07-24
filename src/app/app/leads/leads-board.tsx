@@ -11,9 +11,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/shared/components/empty-state";
-import type { Lead, LeadStage } from "@/db/schema";
+import type { LeadStage } from "@/db/schema";
+import type { LeadListItem } from "@/modules/leads/leads-service";
 import type { AssignableTeamMember } from "@/modules/organizations/team-members";
-import { PriorityBadge, ScoreBadge } from "./lead-badges";
+import { PriorityBadge, QualificationBadge, ScoreBadge } from "@/shared/components/lead-badges";
 import { CreateLeadDialog } from "./create-lead-dialog";
 import { ManageStagesDialog } from "./manage-stages-dialog";
 
@@ -21,7 +22,7 @@ const ALL = "__all__";
 const PRIORITIES = ["low", "medium", "high", "urgent"] as const;
 
 type Props = {
-  initialLeads: Lead[];
+  initialLeads: LeadListItem[];
   stages: LeadStage[];
   teamMembers: AssignableTeamMember[];
   canCreate: boolean;
@@ -87,7 +88,7 @@ export function LeadsBoard({ initialLeads, stages, teamMembers, canCreate, canUp
   }
 
   const leadsByStage = useMemo(() => {
-    const map = new Map<string, Lead[]>();
+    const map = new Map<string, LeadListItem[]>();
     for (const stage of stages) map.set(stage.id, []);
     for (const lead of leads) {
       const bucket = map.get(lead.stageId);
@@ -104,7 +105,7 @@ export function LeadsBoard({ initialLeads, stages, teamMembers, canCreate, canUp
           <Input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Search name, email, phone, company..."
+            placeholder="Search name, email, phone, company, industry, intent..."
             className="w-full sm:w-64"
           />
           <Select value={stageId} onValueChange={(v) => setStageId(v ?? ALL)}>
@@ -188,9 +189,14 @@ export function LeadsBoard({ initialLeads, stages, teamMembers, canCreate, canUp
             <TableHeader>
               <TableRow>
                 <TableHead>Lead</TableHead>
+                <TableHead>Email</TableHead>
+                <TableHead>Intent</TableHead>
+                <TableHead>Conversations</TableHead>
                 <TableHead>Stage</TableHead>
                 <TableHead>Priority</TableHead>
                 <TableHead>Score</TableHead>
+                <TableHead>Qualification</TableHead>
+                <TableHead>Source</TableHead>
                 <TableHead>Assigned</TableHead>
                 <TableHead>Last activity</TableHead>
               </TableRow>
@@ -200,13 +206,18 @@ export function LeadsBoard({ initialLeads, stages, teamMembers, canCreate, canUp
                 <TableRow key={lead.id}>
                   <TableCell>
                     <Link href={`/app/leads/${lead.id}`} className="font-medium hover:underline">
-                      {lead.name ?? lead.email ?? lead.phone ?? "Unnamed lead"}
+                      {lead.visitorName ?? lead.visitorEmail ?? lead.visitorPhone ?? "Unnamed lead"}
                     </Link>
-                    {lead.company ? <p className="text-xs text-muted-foreground">{lead.company}</p> : null}
+                    {lead.visitorCompany ? <p className="text-xs text-muted-foreground">{lead.visitorCompany}</p> : null}
                   </TableCell>
+                  <TableCell className="text-muted-foreground">{lead.visitorEmail ?? "—"}</TableCell>
+                  <TableCell className="text-muted-foreground capitalize">{lead.visitorIntent ?? "—"}</TableCell>
+                  <TableCell className="text-muted-foreground">{lead.conversationCount}</TableCell>
                   <TableCell className="text-muted-foreground">{stageById.get(lead.stageId)?.name ?? "—"}</TableCell>
                   <TableCell><PriorityBadge priority={lead.priority} /></TableCell>
                   <TableCell><ScoreBadge score={lead.score} /></TableCell>
+                  <TableCell><QualificationBadge status={lead.qualificationStatus} /></TableCell>
+                  <TableCell className="text-muted-foreground capitalize">{lead.source}</TableCell>
                   <TableCell className="text-muted-foreground">
                     {lead.assignedUserId ? (emailByUserId.get(lead.assignedUserId) ?? "—") : "Unassigned"}
                   </TableCell>
@@ -235,11 +246,13 @@ export function LeadsBoard({ initialLeads, stages, teamMembers, canCreate, canUp
                 {(leadsByStage.get(stage.id) ?? []).map((lead) => (
                   <div key={lead.id} className="rounded-md border p-2.5">
                     <Link href={`/app/leads/${lead.id}`} className="text-sm font-medium hover:underline">
-                      {lead.name ?? lead.email ?? lead.phone ?? "Unnamed lead"}
+                      {lead.visitorName ?? lead.visitorEmail ?? lead.visitorPhone ?? "Unnamed lead"}
                     </Link>
-                    <div className="mt-1 flex items-center gap-1.5">
+                    {lead.visitorCompany ? <p className="text-xs text-muted-foreground">{lead.visitorCompany}</p> : null}
+                    <div className="mt-1 flex flex-wrap items-center gap-1.5">
                       <PriorityBadge priority={lead.priority} />
                       <ScoreBadge score={lead.score} />
+                      <QualificationBadge status={lead.qualificationStatus} />
                     </div>
                     {canUpdate ? (
                       <Select value={stage.id} onValueChange={(v) => v && v !== stage.id && moveStage(lead.id, v)}>

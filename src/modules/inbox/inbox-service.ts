@@ -1,13 +1,29 @@
 import "server-only";
 import { and, desc, eq, isNull, or, sql } from "drizzle-orm";
 import { withRlsContext } from "@/db/client";
-import { conversationMessages, conversations, widgets, type Conversation } from "@/db/schema";
+import {
+  conversationMessages,
+  conversations,
+  conversationSessions,
+  visitorProfiles,
+  widgets,
+  type Conversation,
+  type Lead,
+} from "@/db/schema";
 import { requireCompanySession } from "@/lib/auth/session";
 import { assertPermission } from "@/modules/permissions";
 import type { InboxQuery } from "@/modules/leads/validation";
+import { getLeadSummariesByVisitorProfileId } from "@/modules/visitor-profiles/list-helpers";
 import { assertConversationAccessible } from "./shared";
 
-export type InboxConversationItem = Conversation & { widgetName: string };
+export type InboxConversationItem = Conversation & {
+  widgetName: string;
+  visitorName: string | null;
+  visitorCompany: string | null;
+  visitorPhone: string | null;
+  leadScore: number | null;
+  leadQualificationStatus: Lead["qualificationStatus"] | null;
+};
 
 const LIST_LIMIT = 50;
 
@@ -62,14 +78,30 @@ export async function listInboxConversations(query: InboxQuery): Promise<InboxCo
     }
 
     const rows = await tx
-      .select({ conversation: conversations, widgetName: widgets.name })
+      .select({ conversation: conversations, widgetName: widgets.name, visitorProfile: visitorProfiles })
       .from(conversations)
       .innerJoin(widgets, eq(widgets.id, conversations.widgetId))
+      .leftJoin(conversationSessions, eq(conversationSessions.id, conversations.sessionId))
+      .leftJoin(visitorProfiles, eq(visitorProfiles.id, conversationSessions.visitorProfileId))
       .where(and(...conditions))
       .orderBy(desc(conversations.lastActivityAt))
       .limit(LIST_LIMIT);
 
-    return rows.map((row) => ({ ...row.conversation, widgetName: row.widgetName }));
+    const visitorProfileIds = [...new Set(rows.map((r) => r.visitorProfile?.id).filter((id): id is string => Boolean(id)))];
+    const leadByVisitorProfileId = await getLeadSummariesByVisitorProfileId(tx, session.organizationId, visitorProfileIds);
+
+    return rows.map((row) => {
+      const lead = row.visitorProfile ? leadByVisitorProfileId.get(row.visitorProfile.id) : undefined;
+      return {
+        ...row.conversation,
+        widgetName: row.widgetName,
+        visitorName: row.visitorProfile?.name ?? null,
+        visitorCompany: row.visitorProfile?.company ?? null,
+        visitorPhone: row.visitorProfile?.phone ?? null,
+        leadScore: lead?.score ?? null,
+        leadQualificationStatus: lead?.qualificationStatus ?? null,
+      };
+    });
   });
 }
 
@@ -91,7 +123,7 @@ export async function markConversationRead(conversationId: string): Promise<void
 }
 
 export type InboxConversationDetail = {
-  conversation: InboxConversationItem | null;
+  conversation: (Conversation & { widgetName: string }) | null;
   messages: (typeof conversationMessages.$inferSelect)[];
 };
 

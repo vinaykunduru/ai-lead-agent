@@ -1,10 +1,20 @@
 import "server-only";
 import { and, desc, eq, exists, gte, ilike, isNull, lte, or } from "drizzle-orm";
 import { withRlsContext } from "@/db/client";
-import { leadAssignments, leadScores, leadStageHistory, leadStages, leadTags, leads, type Lead } from "@/db/schema";
+import {
+  leadAssignments,
+  leadScores,
+  leadStageHistory,
+  leadStages,
+  leadTags,
+  leads,
+  visitorProfiles,
+  type Lead,
+} from "@/db/schema";
 import { requireCompanySession } from "@/lib/auth/session";
 import { assertPermission } from "@/modules/permissions";
 import { recordAuditLog } from "@/modules/audit/service";
+import { getConversationCountsByVisitorProfileId } from "@/modules/visitor-profiles/list-helpers";
 import { recordActivity } from "./activity";
 import { assertLeadBelongsToOrg } from "./shared";
 import { ensureDefaultStages } from "./stages-service";
@@ -13,7 +23,24 @@ import type { AssignLeadInput, ChangeStageInput, CreateLeadInput, LeadSearchQuer
 
 const DEFAULT_LIST_LIMIT = 50;
 
-export async function listLeads(filter: LeadSearchQuery = {}): Promise<Lead[]> {
+/**
+ * A lead's "visitor" columns prefer the linked Visitor Profile (richer,
+ * kept in sync by automatic extraction) and fall back to the lead's own
+ * inline name/email/phone/company for leads created before this feature or
+ * without a resolvable visitor (Visitor Profile module spec: no backfill,
+ * `visitorProfileId` may stay null forever on old rows).
+ */
+export type LeadListItem = Lead & {
+  visitorName: string | null;
+  visitorEmail: string | null;
+  visitorPhone: string | null;
+  visitorCompany: string | null;
+  visitorIntent: string | null;
+  conversationSummary: string | null;
+  conversationCount: number;
+};
+
+export async function listLeads(filter: LeadSearchQuery = {}): Promise<LeadListItem[]> {
   const session = await requireCompanySession();
   assertPermission(session, "leads.view");
 
@@ -38,7 +65,19 @@ export async function listLeads(filter: LeadSearchQuery = {}): Promise<Lead[]> {
     if (filter.q) {
       const term = `%${filter.q}%`;
       conditions.push(
-        or(ilike(leads.name, term), ilike(leads.email, term), ilike(leads.phone, term), ilike(leads.company, term))!,
+        or(
+          ilike(leads.name, term),
+          ilike(leads.email, term),
+          ilike(leads.phone, term),
+          ilike(leads.company, term),
+          ilike(visitorProfiles.name, term),
+          ilike(visitorProfiles.email, term),
+          ilike(visitorProfiles.phone, term),
+          ilike(visitorProfiles.company, term),
+          ilike(visitorProfiles.industry, term),
+          ilike(visitorProfiles.interestedService, term),
+          ilike(visitorProfiles.intent, term),
+        )!,
       );
     }
     if (filter.tag) {
@@ -52,12 +91,27 @@ export async function listLeads(filter: LeadSearchQuery = {}): Promise<Lead[]> {
       );
     }
 
-    return tx
-      .select()
+    const rows = await tx
+      .select({ lead: leads, visitorProfile: visitorProfiles })
       .from(leads)
+      .leftJoin(visitorProfiles, eq(visitorProfiles.id, leads.visitorProfileId))
       .where(and(...conditions))
       .orderBy(desc(leads.lastActivityAt))
       .limit(filter.limit ?? DEFAULT_LIST_LIMIT);
+
+    const visitorProfileIds = [...new Set(rows.map((r) => r.visitorProfile?.id).filter((id): id is string => Boolean(id)))];
+    const conversationCounts = await getConversationCountsByVisitorProfileId(tx, session.organizationId, visitorProfileIds);
+
+    return rows.map((row) => ({
+      ...row.lead,
+      visitorName: row.visitorProfile?.name ?? row.lead.name,
+      visitorEmail: row.visitorProfile?.email ?? row.lead.email,
+      visitorPhone: row.visitorProfile?.phone ?? row.lead.phone,
+      visitorCompany: row.visitorProfile?.company ?? row.lead.company,
+      visitorIntent: row.visitorProfile?.intent ?? null,
+      conversationSummary: row.visitorProfile?.conversationSummary ?? null,
+      conversationCount: row.visitorProfile ? (conversationCounts.get(row.visitorProfile.id) ?? 0) : 0,
+    }));
   });
 }
 

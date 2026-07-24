@@ -44,6 +44,18 @@ const PROMPT: StructuredPrompt = {
     { fieldKey: "email", label: "Email", required: true, placeholder: "you@company.com", validationType: "email" },
   ],
   language: { primary: "en", supported: ["en", "es"], autoDetect: true, fallback: "en" },
+  visitor: null,
+};
+
+const PROMPT_WITH_VISITOR: StructuredPrompt = {
+  ...PROMPT,
+  visitor: {
+    known: [
+      { label: "Name", value: "Rahul" },
+      { label: "Company", value: "ABC Technologies" },
+    ],
+    guidance: ["Never ask for personal contact details in your very first reply — answer the visitor's question or provide value first."],
+  },
 };
 
 describe("prompt renderers", () => {
@@ -97,6 +109,22 @@ describe("prompt renderers", () => {
     for (const rendererId of PROMPT_RENDERER_IDS) {
       const text = renderStructuredPrompt(rendererId, withoutRules);
       expect(text).not.toContain("Never discuss competitors");
+    }
+  });
+
+  it("omits the visitor section entirely when there is no visitor context", () => {
+    for (const rendererId of PROMPT_RENDERER_IDS) {
+      const text = renderStructuredPrompt(rendererId, PROMPT);
+      expect(text).not.toContain("Rahul");
+    }
+  });
+
+  it("includes known visitor fields and never re-asks for them, for every renderer", () => {
+    for (const rendererId of PROMPT_RENDERER_IDS) {
+      const text = renderStructuredPrompt(rendererId, PROMPT_WITH_VISITOR);
+      expect(text).toContain("Rahul");
+      expect(text).toContain("ABC Technologies");
+      expect(text).toContain("Never ask for personal contact details in your very first reply");
     }
   });
 });

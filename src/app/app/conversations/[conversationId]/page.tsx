@@ -11,6 +11,8 @@ import { getConversationDetail } from "@/modules/conversation/inspector-service"
 import { loadAiBehaviourForConversation } from "@/modules/ai-behaviour/conversation-config";
 import { generateSystemPrompt } from "@/modules/ai-behaviour/prompt-generator";
 import { renderStructuredPrompt } from "@/modules/ai-behaviour/rendering";
+import { getVisitorContextForConversation } from "@/modules/visitor-profiles/service";
+import { VisitorInfoCard } from "@/shared/components/visitor-info-card";
 
 type BadgeVariant = NonNullable<VariantProps<typeof badgeVariants>["variant"]>;
 
@@ -47,6 +49,7 @@ export default async function ConversationDetailPage({
   const behaviourConfig = await loadAiBehaviourForConversation(detail.conversation.organizationId);
   const structuredPrompt = generateSystemPrompt(behaviourConfig);
   const renderedPrompt = renderStructuredPrompt(behaviourConfig.profile.aiProvider, structuredPrompt);
+  const visitorContext = await getVisitorContextForConversation(conversationId);
 
   return (
     <div>
@@ -117,6 +120,13 @@ export default async function ConversationDetailPage({
         </Card>
 
         <div className="space-y-4">
+          {visitorContext ? (
+            <VisitorInfoCard
+              profile={visitorContext.profile}
+              lead={visitorContext.lead}
+              viewHref={`/app/visitors/${visitorContext.profile.id}`}
+            />
+          ) : null}
           <Card>
             <CardHeader>
               <CardTitle className="text-sm font-medium text-muted-foreground">

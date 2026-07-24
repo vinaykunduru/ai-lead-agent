@@ -1,4 +1,4 @@
-import type { AiBusinessHours, AiBusinessRule, AiLeadQuestion, AiProfile } from "@/db/schema";
+import type { AiBusinessHours, AiBusinessRule, AiLeadQuestion, AiProfile, VisitorProfile } from "@/db/schema";
 
 /**
  * Fixed, platform-level safety guardrails — never company-configurable,
@@ -22,6 +22,49 @@ export const PLATFORM_SAFETY_GUARDRAILS: readonly string[] = [
 
 export const DEFAULT_SAFETY_FALLBACK_MESSAGE =
   "I don't have that information right now — I'd be happy to connect you with our team.";
+
+/**
+ * Visitor Profile & Lead Qualification module: fixed behavioral rules for
+ * how the AI collects visitor information, always included whenever a
+ * visitor profile exists. These are UX-pacing rules, not safety rules, so
+ * they live here rather than PLATFORM_SAFETY_GUARDRAILS — a company's own
+ * `askFollowUpQuestions`/`oneQuestionAtATime` settings still govern the
+ * mechanics of asking; these govern *when* and *how* it's acceptable to ask
+ * for contact details specifically.
+ */
+export const VISITOR_QUALIFICATION_GUIDANCE: readonly string[] = [
+  "Never ask for personal contact details in your very first reply — answer the visitor's question or provide value first.",
+  'Before asking for a name or mobile number, briefly explain why (for example: "to recommend the best option and arrange a follow-up if needed").',
+  "Never ask for information already listed as known below — it has already been provided.",
+  "Never force the visitor to share contact details. If they decline or change the subject, keep helping them normally without asking again.",
+  "Ask for at most one or two missing details at a time, phrased naturally as part of the conversation — never as a form or a list of questions.",
+  "If a shared phone number or email looks incomplete or malformed, politely ask the visitor to double-check and resend it.",
+];
+
+function describeKnownVisitorFields(profile: VisitorProfile | null | undefined): { label: string; value: string }[] {
+  if (!profile) return [];
+  const entries: [string, string | null][] = [
+    ["Name", profile.name],
+    ["Mobile number", profile.phone],
+    ["Email", profile.email],
+    ["Company", profile.company],
+    ["Designation", profile.designation],
+    ["Industry", profile.industry],
+    ["Website", profile.website],
+    ["City", profile.city],
+    ["Country", profile.country],
+    ["Interested service", profile.interestedService],
+    ["Requirement", profile.requirement],
+    ["Budget", profile.budget],
+    ["Timeline", profile.timeline],
+    ["Team size", profile.teamSize],
+    ["Current solution", profile.currentSolution],
+    ["Preferred contact time", profile.preferredContactTime],
+  ];
+  return entries
+    .filter((entry): entry is [string, string] => Boolean(entry[1] && entry[1].trim()))
+    .map(([label, value]) => ({ label, value }));
+}
 
 export type StructuredPrompt = {
   identity: {
@@ -76,6 +119,13 @@ export type StructuredPrompt = {
     autoDetect: boolean;
     fallback: string;
   };
+  /** null when there's no visitor context at all (e.g. the AI Behaviour
+   * Playground/Conversation Inspector's config-preview call sites, which
+   * render this prompt without a specific visitor). */
+  visitor: {
+    known: { label: string; value: string }[];
+    guidance: readonly string[];
+  } | null;
 };
 
 export type SystemPromptInputs = {
@@ -83,6 +133,9 @@ export type SystemPromptInputs = {
   businessRules: AiBusinessRule[];
   leadQuestions: AiLeadQuestion[];
   businessHours: AiBusinessHours;
+  /** Omitted by config-preview call sites (Playground, Conversation
+   * Inspector) that have no specific visitor to describe. */
+  visitor?: VisitorProfile | null;
 };
 
 /**
@@ -95,7 +148,7 @@ export type SystemPromptInputs = {
  * responsibility belongs entirely to the renderers.
  */
 export function generateSystemPrompt(inputs: SystemPromptInputs): StructuredPrompt {
-  const { profile, businessRules, leadQuestions, businessHours } = inputs;
+  const { profile, businessRules, leadQuestions, businessHours, visitor } = inputs;
 
   const supportedLanguages = Array.isArray(profile.supportedLanguages)
     ? (profile.supportedLanguages as string[])
@@ -159,5 +212,9 @@ export function generateSystemPrompt(inputs: SystemPromptInputs): StructuredProm
       autoDetect: profile.autoDetectLanguage,
       fallback: profile.fallbackLanguage,
     },
+    visitor:
+      visitor === undefined
+        ? null
+        : { known: describeKnownVisitorFields(visitor), guidance: VISITOR_QUALIFICATION_GUIDANCE },
   };
 }

@@ -1,4 +1,5 @@
 import "server-only";
+import { after } from "next/server";
 import { and, eq, isNotNull } from "drizzle-orm";
 import { db } from "@/db/client";
 import { conversationMessages, conversations } from "@/db/schema";
@@ -18,6 +19,9 @@ import { recordUsage } from "./usage-service";
 import { findLeadIdForConversation } from "@/modules/inbox/shared";
 import { recordActivity } from "@/modules/leads/activity";
 import { recordAuditLog } from "@/modules/audit/service";
+import { ensureVisitorProfileForSession } from "@/modules/visitor-profiles/resolve-service";
+import { runImmediateExtraction } from "./extraction/stage1";
+import { runBackgroundExtraction } from "./extraction/stage2";
 import type { ConversationTransport } from "./transport/types";
 import type { SendMessageInput } from "./validation";
 
@@ -57,6 +61,19 @@ export async function handleIncomingMessage(
     role: "user",
     content: input.message,
     status: "complete",
+  });
+
+  // Visitor Profile & Lead Qualification (Stage 1, immediate): every
+  // session always has a profile — even a blank one — so there's a stable
+  // id to progressively enrich. Regex-only, synchronous, so this never adds
+  // meaningful latency; the result feeds straight into prompt generation
+  // below so the model already knows about anything just shared this turn.
+  let visitorProfile = await ensureVisitorProfileForSession(session);
+  visitorProfile = await runImmediateExtraction({
+    organizationId: widget.organizationId,
+    sessionId: session.id,
+    visitorProfileId: visitorProfile.id,
+    message: input.message,
   });
 
   // Human Takeover (module spec §6): a human already owns this
@@ -105,7 +122,7 @@ export async function handleIncomingMessage(
   const retrievedChunks = await retrieveKnowledgeForConversation(widget.organizationId, input.message);
 
   // Generate Structured Prompt → Render Provider Prompt
-  const structuredPrompt = generateSystemPrompt(behaviourConfig);
+  const structuredPrompt = generateSystemPrompt({ ...behaviourConfig, visitor: visitorProfile });
   const renderedPrompt = appendKnowledgeContext(
     renderStructuredPrompt(behaviourConfig.profile.aiProvider, structuredPrompt),
     retrievedChunks,
@@ -231,6 +248,21 @@ export async function handleIncomingMessage(
   // Return
   transport.send({ type: "done", messageId: assistantMessage.id, promptTokens, completionTokens });
   await touchActivity(session.id, conversation.id);
+
+  // Visitor Profile & Lead Qualification (Stage 2, background): scheduled
+  // via Next's after() so it only starts once this response has already
+  // been fully sent to the visitor — module spec: "must NEVER increase
+  // response latency." Best-effort; every failure inside is swallowed.
+  after(() =>
+    runBackgroundExtraction({
+      organizationId: widget.organizationId,
+      widgetId: widget.id,
+      sessionId: session.id,
+      conversationId: conversation.id,
+      visitorProfileId: visitorProfile.id,
+      aiProvider: behaviourConfig.profile.aiProvider,
+    }),
+  );
 }
 
 async function countAiAuthoredMessages(conversationId: string): Promise<number> {

@@ -7,7 +7,7 @@ import { describeBusinessHours, describeLeadQuestion } from "./shared";
  * system prompts more reliably than plain prose.
  */
 export const renderClaudePrompt: PromptRenderer = (prompt) => {
-  const { identity, behaviour, guardrails, businessRules, leadQualification, language } = prompt;
+  const { identity, behaviour, guardrails, businessRules, leadQualification, language, visitor } = prompt;
 
   const identityBlock = [
     `<identity>`,
@@ -84,7 +84,19 @@ export const renderClaudePrompt: PromptRenderer = (prompt) => {
     `</guardrails>`,
   ].join("\n");
 
-  return [identityBlock, personalityBlock, responseBlock, hoursBlock, rulesBlock, leadBlock, languageBlock, guardrailsBlock]
+  const visitorBlock = visitor
+    ? [
+        `<visitor>`,
+        visitor.known.length > 0
+          ? [`Known so far (never ask for these again):`, ...visitor.known.map((f) => `- ${f.label}: ${f.value}`)].join("\n")
+          : "Nothing known about this visitor yet.",
+        `Rules for collecting visitor information:`,
+        ...visitor.guidance.map((rule) => `- ${rule}`),
+        `</visitor>`,
+      ].join("\n")
+    : null;
+
+  return [identityBlock, personalityBlock, responseBlock, hoursBlock, rulesBlock, leadBlock, languageBlock, visitorBlock, guardrailsBlock]
     .filter(Boolean)
     .join("\n\n");
 };

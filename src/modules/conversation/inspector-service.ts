@@ -4,18 +4,31 @@ import { withRlsContext } from "@/db/client";
 import {
   conversationCitations,
   conversationMessages,
+  conversationSessions,
   conversationUsage,
   conversations,
+  visitorProfiles,
   widgets,
   type Conversation,
   type ConversationCitation,
   type ConversationMessage,
   type ConversationUsage,
+  type Lead,
 } from "@/db/schema";
 import { requireCompanySession } from "@/lib/auth/session";
 import { assertPermission } from "@/modules/permissions";
+import { getLeadSummariesByVisitorProfileId } from "@/modules/visitor-profiles/list-helpers";
 
-export type ConversationListItem = Conversation & { widgetName: string; messageCount: number };
+export type ConversationListItem = Conversation & {
+  widgetName: string;
+  messageCount: number;
+  visitorName: string | null;
+  visitorCompany: string | null;
+  visitorPhone: string | null;
+  visitorIntent: string | null;
+  leadScore: number | null;
+  leadQualificationStatus: Lead["qualificationStatus"] | null;
+};
 
 const LIST_PAGE_SIZE = 50;
 
@@ -42,9 +55,12 @@ export async function listConversations(filter?: { widgetId?: string }): Promise
       .select({
         conversation: conversations,
         widgetName: widgets.name,
+        visitorProfile: visitorProfiles,
       })
       .from(conversations)
       .innerJoin(widgets, eq(widgets.id, conversations.widgetId))
+      .leftJoin(conversationSessions, eq(conversationSessions.id, conversations.sessionId))
+      .leftJoin(visitorProfiles, eq(visitorProfiles.id, conversationSessions.visitorProfileId))
       .where(and(...conditions))
       .orderBy(desc(conversations.lastActivityAt))
       .limit(LIST_PAGE_SIZE);
@@ -58,11 +74,23 @@ export async function listConversations(filter?: { widgetId?: string }): Promise
       countByConversation.set(row.conversationId, (countByConversation.get(row.conversationId) ?? 0) + 1);
     }
 
-    return rows.map((row) => ({
-      ...row.conversation,
-      widgetName: row.widgetName,
-      messageCount: countByConversation.get(row.conversation.id) ?? 0,
-    }));
+    const visitorProfileIds = [...new Set(rows.map((r) => r.visitorProfile?.id).filter((id): id is string => Boolean(id)))];
+    const leadByVisitorProfileId = await getLeadSummariesByVisitorProfileId(tx, session.organizationId, visitorProfileIds);
+
+    return rows.map((row) => {
+      const lead = row.visitorProfile ? leadByVisitorProfileId.get(row.visitorProfile.id) : undefined;
+      return {
+        ...row.conversation,
+        widgetName: row.widgetName,
+        messageCount: countByConversation.get(row.conversation.id) ?? 0,
+        visitorName: row.visitorProfile?.name ?? null,
+        visitorCompany: row.visitorProfile?.company ?? null,
+        visitorPhone: row.visitorProfile?.phone ?? null,
+        visitorIntent: row.visitorProfile?.intent ?? null,
+        leadScore: lead?.score ?? null,
+        leadQualificationStatus: lead?.qualificationStatus ?? null,
+      };
+    });
   });
 }
 

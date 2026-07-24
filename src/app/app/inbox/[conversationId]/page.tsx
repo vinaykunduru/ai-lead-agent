@@ -7,6 +7,8 @@ import { BackLink } from "@/shared/components/back-link";
 import { requireCompanySession } from "@/lib/auth/session";
 import { can } from "@/modules/permissions";
 import { getInboxConversation } from "@/modules/inbox/inbox-service";
+import { getVisitorContextForConversation } from "@/modules/visitor-profiles/service";
+import { VisitorInfoCard } from "@/shared/components/visitor-info-card";
 import { InboxActions } from "./inbox-actions";
 
 export default async function InboxConversationPage({
@@ -24,6 +26,7 @@ export default async function InboxConversationPage({
   if (!detail.conversation) {
     notFound();
   }
+  const visitorContext = await getVisitorContextForConversation(conversationId);
 
   return (
     <div>
@@ -39,7 +42,7 @@ export default async function InboxConversationPage({
           </Badge>
         }
       />
-      <div className="p-6">
+      <div className="grid grid-cols-1 gap-4 p-6 lg:grid-cols-[minmax(320px,2fr)_minmax(280px,1fr)]">
         <Card>
           <CardHeader>
             <CardTitle className="text-sm font-medium text-muted-foreground">Transcript</CardTitle>
@@ -63,6 +66,14 @@ export default async function InboxConversationPage({
           </CardContent>
           <InboxActions conversation={detail.conversation} canReply={can(session, "inbox.reply")} />
         </Card>
+
+        {visitorContext ? (
+          <VisitorInfoCard
+            profile={visitorContext.profile}
+            lead={visitorContext.lead}
+            viewHref={`/app/visitors/${visitorContext.profile.id}`}
+          />
+        ) : null}
       </div>
     </div>
   );

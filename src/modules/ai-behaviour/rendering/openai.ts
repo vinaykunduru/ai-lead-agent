@@ -6,7 +6,7 @@ import { describeBusinessHours, describeLeadQuestion } from "./shared";
  * plain-markdown system-message convention OpenAI's own docs use.
  */
 export const renderOpenAiPrompt: PromptRenderer = (prompt) => {
-  const { identity, behaviour, guardrails, businessRules, leadQualification, language } = prompt;
+  const { identity, behaviour, guardrails, businessRules, leadQualification, language, visitor } = prompt;
   const sections: string[] = [];
 
   sections.push(`## Identity\nYou are ${identity.assistantName}${identity.role ? `, ${identity.role}` : ""}.`);
@@ -58,6 +58,19 @@ export const renderOpenAiPrompt: PromptRenderer = (prompt) => {
   sections.push(
     `## Language\nRespond in ${language.primary}.${language.autoDetect ? " Auto-detect the visitor's language and switch to it if supported." : ""} Supported languages: ${language.supported.join(", ")}. Fall back to ${language.fallback} if unsupported.`,
   );
+
+  if (visitor) {
+    sections.push(
+      [
+        "## Visitor information",
+        visitor.known.length > 0
+          ? `Known so far (never ask for these again):\n${visitor.known.map((f) => `- ${f.label}: ${f.value}`).join("\n")}`
+          : "Nothing known about this visitor yet.",
+        "Rules for collecting visitor information:",
+        visitor.guidance.map((rule) => `- ${rule}`).join("\n"),
+      ].join("\n"),
+    );
+  }
 
   sections.push(
     [

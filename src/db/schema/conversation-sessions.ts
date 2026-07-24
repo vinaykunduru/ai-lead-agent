@@ -1,5 +1,6 @@
 import { jsonb, pgEnum, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { organizations } from "./organizations";
+import { visitorProfiles } from "./visitor-profiles";
 import { widgets } from "./widgets";
 
 export const conversationSessionStatusEnum = pgEnum("conversation_session_status", ["active", "ended"]);
@@ -12,6 +13,12 @@ export const conversationSessionStatusEnum = pgEnum("conversation_session_status
  * never derived from anything the company or Anthropic controls. A single
  * session can span multiple `conversations` over time (the visitor closes
  * the tab and returns days later — same session, new thread).
+ *
+ * `visitorProfileId` is nullable and widget-session-scoped identity stays
+ * exactly as before — this column only *links* a session to the org-wide
+ * Visitor Profile once one exists (see modules/visitor-profiles), it never
+ * stores lead/qualification data itself. That still lives entirely on
+ * `visitor_profiles`/`leads` — this table's own scope is unchanged.
  */
 export const conversationSessions = pgTable("conversation_sessions", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -22,10 +29,9 @@ export const conversationSessions = pgTable("conversation_sessions", {
     .notNull()
     .references(() => widgets.id, { onDelete: "cascade" }),
   visitorId: text("visitor_id").notNull(),
+  visitorProfileId: uuid("visitor_profile_id").references(() => visitorProfiles.id, { onDelete: "set null" }),
   status: conversationSessionStatusEnum("status").notNull().default("active"),
-  // Light, non-PII operational context only (referrer URL, user agent) —
-  // never anything resembling a lead record (CLAUDE.md scope: this module
-  // never builds a CRM/lead pipeline).
+  // Light, non-PII operational context only (referrer URL, user agent).
   metadata: jsonb("metadata").notNull().default({}),
   startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
   endedAt: timestamp("ended_at", { withTimezone: true }),
